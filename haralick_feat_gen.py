@@ -5,8 +5,10 @@ Created on Mon Oct 21 21:06:23 2019
 @author: aczd087
 """
 import numpy as np
-import stats
-
+from scipy import stats
+import time
+import ipdb
+from skimage.feature import greycoprops
 
 def offset(length, angle):
     """Return the offset in pixels for a given length and angle"""
@@ -80,12 +82,10 @@ def haralick_features(img, win, d, theta, levels, props):
         print('rows',m)
         print ("Start Execution : ",end="") 
         print (time.ctime()) 
-        
         for n in range(cols):
             coocs = cooc_maps(arr, (m + margin, n + margin), win, d, theta, levels)
             glcms = compute_glcms(coocs, levels)
             feature_map[m, n, :] = compute_props(glcms, props)
         print ("End Execution : ",end="") 
         print (time.ctime()) 
-            
     return feature_map

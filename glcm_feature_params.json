@@ -1,0 +1,1 @@
+[{"window": 32, "offset": 0, "theta_angle": 0, "props": ["contrast", "dissimilarity", "energy", "homogeneity"]}, {"window": 16, "offset": 0, "theta_angle": 0, "props": ["dissimilarity", "homogeneity"]}, {"window": 9, "offset": 0, "theta_angle": 0, "props": ["dissimilarity", "contrast"]}, {"window": 7, "offset": 0, "theta_angle": 0, "props": ["dissimilarity", "contrast"]}]
