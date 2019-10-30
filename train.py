@@ -4,13 +4,18 @@ import pylab as plt
 from glob import glob
 import argparse
 import os
-
+import json
+import ipdb
 #import progressbar
 import pickle as pkl
 from numpy.lib import stride_tricks
 from skimage import feature
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import classification_report
+from sklearn.svm import SVC
+
 import time
 #import mahotas as mt
 from scipy import stats
@@ -20,18 +25,19 @@ from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
 from imblearn.combine import SMOTETomek
 
 def check_args(args):
+    print(args.image_train_dir)
 
-    if not os.path.exists(args.image_dir):
+    if not os.path.exists(args.image_train_dir):
         raise ValueError("Image directory does not exist")
 
-    if not os.path.exists(args.label_dir):
+    if not os.path.exists(args.image_test_dir):
         raise ValueError("Label directory does not exist")
 
     if args.classifier != "SVM" and args.classifier != "RF" and args.classifier != "GBC":
         raise ValueError("Classifier must be either SVM, RF or GBC")
 
-    if args.output_model.split('.')[-1] != "p":
-        raise ValueError("Model extension must be .p")
+    #if args.output_model.split('.')[-1] != "p":
+     #   raise ValueError("Model extension must be .p")
 
     return args
 
@@ -50,22 +56,24 @@ def read_data(image_dir):
     """The purpose of this method is to read in the dataset for analysis"""
     print ('[INFO] Reading image data.')
 
-    filelist = glob(os.path.join(image_dir, '*.jpg'))
+    filelist = glob(os.path.join(image_dir, '*.png'))
 
     file_img_info={}
     for file in filelist:
-        
+        #ipdb.set_trace()
         img=imageio.imread(file)
         f_b_name=os.path.splitext(os.path.basename(file))[0]
         #Getting file labels for analysis
-        label=imageio.imread(os.path.join(os.path.basename(image_dir),
+        bs_dir=os.path.dirname(image_dir)
+        label=imageio.imread(os.path.join(bs_dir,
                                           'masks',
-                                          os.path.basename(file).split('.')[0]+'.png'))
+                                          os.path.basename(file)))
         #Cropped image segmented using method. 
-        img_crop,label_crop=img_grey_scale_preprocess(img,label,20,21)
+        img_crop,label_crop=img_grey_scale_preprocess(img,label,21,20)
         #Image analysis f basename
         file_img_info[f_b_name]={'image':img_crop,'mask':label_crop}
-
+        
+    
 
     return file_img_info
 
@@ -106,15 +114,15 @@ def gen_texture_img(img:imageio.core.util.Array,
         
         #Generating haralick features based on parameter setpoint 
         #Dynamic grey level setting placed into system based on unique grey levels present in the image. 
-        texture_img = haralick_features(img,param_sets['window'],param_sets['offset'],
-                                        param_sets['theta_angle'],256, #np.unique(img)[0].shape
-                                        param_sets['props'])
+        texture_img = haralick_features(img,param_sets['WINDOW'],param_sets['OFFSET'],
+                                        param_sets['ANGLE'],256, #np.unique(img)[0].shape
+                                        param_sets['PROPS'])
         
         if text_rast_img is None:
             text_rast_img=texture_img
         else:
             #Stacking each raster via depth 
-            text_rast_img=np.dstack((text_rast_img,texture_img,f_b_name))
+            text_rast_img=np.dstack((text_rast_img,texture_img))
     
     return text_rast_img
 
@@ -130,13 +138,13 @@ def gen_text_img_f_name(f_b_name:str,haralick_ftrs_lst:list,single_concat_lst=['
         for k,v in dicts.items():
             
             if k.lower() in single_concat_lst:
-                tmp_str=k[0]+k[2]+'_'+concat_lst_int(v,True)
+                tmp_str=k[0]+concat_lst_int(v,True)
             else:
-                tmp_str=k[0]+k[2]+'_'+concat_lst_int(v,False)
+                tmp_str=k[0]+concat_lst_int(v,False)
                 
-            tmp_str_dict=tmp_str_dict+'_'+tmp_str
+            tmp_str_dict=tmp_str_dict+tmp_str
         #Writing dictionary files to file
-        tmp_str_final=tmp_str_final+'__'+tmp_str_dict
+        tmp_str_final=tmp_str_final+'_'+tmp_str_dict
         
     return f_b_name+tmp_str_final
             
@@ -147,19 +155,28 @@ def create_features(f_b_name:str,
                     label:imageio.core.util.Array,
                     haralick_params:list,
                     text_dir:str,
-                    train=True)->tuple(np.ndarray,np.ndarray):
+                    train=True):
 
     num_examples = 1000 # number of examples per image to use for training model
     #Determine the number of unique values present in the mask
     n_uniq_vals=np.unique(label)
     
-    tmp_nm=os.path.join(text_dir,gen_text_img_f_name(f_b_name,haralick_params)+'.npy')
-    
-    if os.path.isfile(tmp_nm):
-        text_rast_img=imageio.imread(tmp_nm)
+    tmp_nm=os.path.join(text_dir,gen_text_img_f_name(f_b_name,haralick_params))
+    #ipdb.set_trace()
+    if os.path.isfile(tmp_nm+'.npy'):
+        text_rast_img=np.load(tmp_nm+'.npy')
     else:
         text_rast_img=gen_texture_img(img,haralick_params)
-        imageio.imwrite(tmp_nm,text_rast_img)
+        #Including grey level for texture analysis
+        text_rast_img=np.dstack((text_rast_img,img))
+        try:
+            np.save(tmp_nm,text_rast_img)
+        except OSError as exc:
+            if exc.errno == 36:
+                print('Error number is 36 filename is too long')
+            else:
+                tmp_nm=os.path.join(text_dir,'trial_arr')
+                np.save(tmp_nm,text_rast_img)
     
     
         
@@ -169,14 +186,14 @@ def create_features(f_b_name:str,
     label_flat=label.reshape((label.shape[0]*label.shape[1],))
     
     #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance. 
-    smt = SMOTETomek(ratio='auto')
-    features_smt, label_smt = smt.fit_sample(features, label_flat)
+    #smt = SMOTETomek(ratio='auto')
+    #features_smt, label_smt = smt.fit_sample(features, label_flat)
     #Class based subsampling required in order to get this system to operate effectively.
     if train == True:
         #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
-        ss_idx = subsample_idx(0, features_smt.shape[0], num_examples)
-        features = features_smt[ss_idx]
-        labels = label_smt[ss_idx]
+        ss_idx = subsample_idx(0, features.shape[0], num_examples)
+        features = features[ss_idx]
+        labels = label_flat[ss_idx]
     else:
         ss_idx = []
         labels = None
@@ -207,7 +224,7 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray
 
     #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
  
-    print ('[INFO] Feature vector size:', X_train.shape)
+    print ('[INFO] Feature vector size:', X.shape)
 
     return X,y#X_train, X_test, y_train, y_test
 
@@ -282,10 +299,11 @@ if __name__ == "__main__":
     image_train_dir = args.image_train_dir
     image_test_dir = args.image_test_dir
     text_dir=args.texture_dir
+    #ipdb.set_trace()
     classifier = args.classifier
     output_model = args.output_model
     
-    with open(arg.h_lick_p,'r') as file_read:
+    with open(args.haralick_params,'r') as file_read:
         h_lick_param=json.load(file_read)    
     
     main(image_train_dir, image_test_dir,text_dir,classifier, output_model,h_lick_param)

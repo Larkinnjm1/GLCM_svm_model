@@ -74,14 +74,16 @@ def img_grey_scale_preprocess(img,mask,blur_sp,thresh_sp):
     x,y,w,h=bbox_coord
 
     #confirming all organs are within bounding box for analysis.
-    org_chk_bool=all_orgs_within_filt_img(mask,filt_mask)
+    org_chk_bool,orgs_not_type,orgs_not_cnt=all_orgs_within_filt_img(mask,filt_mask)
 
     #Placing mask of contour into empty array
-    if org_chk_bool[0]==True:
+    if org_chk_bool==True:
         
         return(img[y:y+h,x:x+w],mask[y:y+h,x:x+w])
         
     else:
         print('Not all organs captured')
+        print('organs missing:',orgs_not_type)
+        print('organs missing counts:',orgs_not_cnt)
         return(img,mask)
     
