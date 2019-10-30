@@ -4,6 +4,7 @@ import pylab as plt
 from glob import glob
 import argparse
 import os
+
 #import progressbar
 import pickle as pkl
 from numpy.lib import stride_tricks
@@ -36,33 +37,37 @@ def check_args(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--image_dir" , help="Path to images", required=True)
-    parser.add_argument("-l", "--label_dir", help="Path to labels", required=True)
+    parser.add_argument("-trn", "--image_train_dir" , help="Path to images/mask folder training directory", required=True)
+    parser.add_argument("-tst", "--image_test_dir", help="Path to images/mask folder test directory", required=True)
+    parser.add_argument('-t','--texture_dir',help='Destination path to texture feature files created during analysis',required=True)
     parser.add_argument("-c", "--classifier", help="Classification model to use", required = True)
     parser.add_argument("-o", "--output_model", help="Path to save model. Must end in .p", required = True)
     parser.add_argument('-h_lick_p',"--haralick_params",help="Path to json dictionary of haralick features",required=True)
     args = parser.parse_args()
     return check_args(args)
 
-def read_data(image_dir, label_dir):
+def read_data(image_dir):
     """The purpose of this method is to read in the dataset for analysis"""
     print ('[INFO] Reading image data.')
 
     filelist = glob(os.path.join(image_dir, '*.jpg'))
-    image_list = []
-    label_list = []
 
+    file_img_info={}
     for file in filelist:
         
         img=imageio.imread(file)
-        label=imageio.imread(os.path.join(label_dir, os.path.basename(file).split('.')[0]+'.png'))
+        f_b_name=os.path.splitext(os.path.basename(file))[0]
+        #Getting file labels for analysis
+        label=imageio.imread(os.path.join(os.path.basename(image_dir),
+                                          'masks',
+                                          os.path.basename(file).split('.')[0]+'.png'))
         #Cropped image segmented using method. 
         img_crop,label_crop=img_grey_scale_preprocess(img,label,20,21)
+        #Image analysis f basename
+        file_img_info[f_b_name]={'image':img_crop,'mask':label_crop}
 
-        image_list.append(img_crop)
-        label_list.append(label_crop)
 
-    return image_list,label_list
+    return file_img_info
 
 def subsample(features, labels, low, high, sample_size):
 
@@ -74,13 +79,27 @@ def subsample_idx(low, high, sample_size):
 
     return np.random.randint(low,high,sample_size)
 
+def concat_lst_int(list_int:list,single_chr=False)->str:
+    """The purpose of this method is to concatenate lists  of integers into single string of numbers together
+    if integer is present it will be converted to a string"""
+    #If single character selected single character taken from string to concatenate
+    try:
+        
+        if single_chr:
+            tmp_str_concat=''.join(str(x[0]) for x in list_int)
+        else:
+            tmp_str_concat=''.join(str(x) for x in list_int)
+    #If error is type error then it will be converted to a integer value 
+    except TypeError as e:
+        assert type(list_int)==int,'String int value not present convert window to integer value'
+        
+        tmp_str_concat=str(list_int)
+        
+    return tmp_str_concat
 
-def create_features(img, label, haralick_params,train=True):
-
-    num_examples = 1000 # number of examples per image to use for training model
-    #Determine the number of unique values present in the mask
-    n_uniq_vals=np.unique(label)
-    
+def gen_texture_img(img:imageio.core.util.Array,
+                    haralick_params:dict)->imageio.core.util.Array:
+    """The purpose of this method is to generate a texture image for a given list of feature parameters and stack them"""
     
     text_rast_img=None
     for param_sets in haralick_params:
@@ -90,17 +109,64 @@ def create_features(img, label, haralick_params,train=True):
         texture_img = haralick_features(img,param_sets['window'],param_sets['offset'],
                                         param_sets['theta_angle'],256, #np.unique(img)[0].shape
                                         param_sets['props'])
+        
         if text_rast_img is None:
             text_rast_img=texture_img
         else:
             #Stacking each raster via depth 
-            text_rast_img=np.dstack((text_rast_img,texture_img))
-        ipdb.set_trace()
+            text_rast_img=np.dstack((text_rast_img,texture_img,f_b_name))
+    
+    return text_rast_img
+
+
+def gen_text_img_f_name(f_b_name:str,haralick_ftrs_lst:list,single_concat_lst=['props'])->str:
+    """The purpose of this method is to generate a texture image file name based on the
+    haralick feature parameters specified and the original basename"""
+    
+    tmp_str_final=''
+    #
+    for dicts in haralick_ftrs_lst:
+        tmp_str_dict=''
+        for k,v in dicts.items():
+            
+            if k.lower() in single_concat_lst:
+                tmp_str=k[0]+k[2]+'_'+concat_lst_int(v,True)
+            else:
+                tmp_str=k[0]+k[2]+'_'+concat_lst_int(v,False)
+                
+            tmp_str_dict=tmp_str_dict+'_'+tmp_str
+        #Writing dictionary files to file
+        tmp_str_final=tmp_str_final+'__'+tmp_str_dict
+        
+    return f_b_name+tmp_str_final
+            
+            
+    
+def create_features(f_b_name:str,
+                    img:imageio.core.util.Array,
+                    label:imageio.core.util.Array,
+                    haralick_params:list,
+                    text_dir:str,
+                    train=True)->tuple(np.ndarray,np.ndarray):
+
+    num_examples = 1000 # number of examples per image to use for training model
+    #Determine the number of unique values present in the mask
+    n_uniq_vals=np.unique(label)
+    
+    tmp_nm=os.path.join(text_dir,gen_text_img_f_name(f_b_name,haralick_params)+'.npy')
+    
+    if os.path.isfile(tmp_nm):
+        text_rast_img=imageio.imread(tmp_nm)
+    else:
+        text_rast_img=gen_texture_img(img,haralick_params)
+        imageio.imwrite(tmp_nm,text_rast_img)
+    
+    
         
     #Flattening image out into shappe method for analysis
     features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
                                      text_rast_img.shape[2])
-    label_flat=label.reshape(label.shape[0]*label.shape[1],1)
+    label_flat=label.reshape((label.shape[0]*label.shape[1],))
     
     #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance. 
     smt = SMOTETomek(ratio='auto')
@@ -117,16 +183,20 @@ def create_features(img, label, haralick_params,train=True):
         
     return features, labels
 
-def create_training_dataset(image_list, label_list,haralick_param):
+def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray:
 
-    print ('[INFO] Creating training dataset on %d image(s).' %len(image_list))
+    print ('[INFO] Creating training dataset on %d image(s).' %len(image_dict.keys()))
 
     X = []
     y = []
 
-    for i, img in enumerate(image_list):
+    for f_b_name,img_arrs in image_dict.items():
 
-        features, labels = create_features(img,label_list[i],haralick_param)
+        features, labels = create_features(f_b_name,
+                                           img_arrs['image'],
+                                           img_arrs['mask'],
+                                           haralick_param,
+                                           text_dir)
         X.append(features)
         y.append(labels)
 
@@ -135,13 +205,13 @@ def create_training_dataset(image_list, label_list,haralick_param):
     y = np.array(y)
     #y = y.reshape(y.shape[0]*y.shape[1], y.shape[2]).ravel()
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
  
     print ('[INFO] Feature vector size:', X_train.shape)
 
-    return X_train, X_test, y_train, y_test
+    return X,y#X_train, X_test, y_train, y_test
 
-def train_model(X, y, classifier):
+def train_model(X:np.ndarray, y:np.ndarray, classifier:str):
 
     if classifier == "SVM":
         from sklearn.svm import SVC
@@ -177,25 +247,45 @@ def test_model(X, y, model):
     print ('[RESULTS] F1: %.2f' %f1)
     print ('--------------------------------')
 
-def main(image_dir, label_dir, classifier, output_model,haralick_param):
+def run_grd_srch(scores):
+    """Run grid search for analysis"""
+    
+        # Set the parameters by cross-validation
+    param_grid = [{'C': [1, 10, 100, 1000], 'kernel': ['linear']},
+                   {'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'kernel': ['rbf']}]
+    
+
+
+def main(image_train_dir :str, image_test_dir:str,
+         text_dir:str ,classifier:str,
+         output_model:str,haralick_param:dict,gridsrch=True):
 
     start = time.time()
     
-    image_list, label_list = read_data(image_dir, label_dir)
-    X_train, X_test, y_train, y_test = create_training_dataset(image_list, label_list,haralick_param)
-    model = train_model(X_train, y_train, classifier)
-    test_model(X_test, y_test, model)
-    pkl.dump(model, open(output_model, "wb"))
+    trn_image_dict = read_data(image_train_dir)
+    tst_image_dict = read_data(image_test_dir)
+    X_train, y_train = create_dataset(trn_image_dict,haralick_param,text_dir)
+    X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir)
+    if gridsrch==True:
+        scores = ['f1', 'jaccard','f1_weighted','jaccard_weighted']
+        
+        
+        
+    else:
+        model = train_model(X_train, y_train, classifier)
+        test_model(X_test, y_test, model)
+        pkl.dump(model, open(output_model, "wb"))
     print ('Processing time:',time.time()-start)
 
 if __name__ == "__main__":
     args = parse_args()
-    image_dir = args.image_dir
-    label_dir = args.label_dir
+    image_train_dir = args.image_train_dir
+    image_test_dir = args.image_test_dir
+    text_dir=args.texture_dir
     classifier = args.classifier
     output_model = args.output_model
     
     with open(arg.h_lick_p,'r') as file_read:
         h_lick_param=json.load(file_read)    
     
-    main(image_dir, label_dir, classifier, output_model,h_lick_param)
+    main(image_train_dir, image_test_dir,text_dir,classifier, output_model,h_lick_param)
