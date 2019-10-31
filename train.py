@@ -6,6 +6,7 @@ import argparse
 import os
 import json
 import ipdb
+import pandas as pd
 #import progressbar
 import pickle as pkl
 from numpy.lib import stride_tricks
@@ -23,6 +24,10 @@ import imageio
 from haralick_feat_gen import haralick_features
 from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
 from imblearn.combine import SMOTETomek
+
+from sklearn.externals import joblib
+
+
 
 def check_args(args):
     print(args.image_train_dir)
@@ -160,40 +165,47 @@ def create_features(f_b_name:str,
     num_examples = 1000 # number of examples per image to use for training model
     #Determine the number of unique values present in the mask
     n_uniq_vals=np.unique(label)
+    file_nm=gen_text_img_f_name(f_b_name,haralick_params)
+    tmp_nm=os.path.join(text_dir,'texture_imgs_raw',file_nm)
     
-    tmp_nm=os.path.join(text_dir,gen_text_img_f_name(f_b_name,haralick_params))
-    #ipdb.set_trace()
-    if os.path.isfile(tmp_nm+'.npy'):
-        text_rast_img=np.load(tmp_nm+'.npy')
-    else:
-        text_rast_img=gen_texture_img(img,haralick_params)
-        #Including grey level for texture analysis
-        text_rast_img=np.dstack((text_rast_img,img))
-        try:
-            np.save(tmp_nm,text_rast_img)
-        except OSError as exc:
-            if exc.errno == 36:
-                print('Error number is 36 filename is too long')
-            else:
-                tmp_nm=os.path.join(text_dir,'trial_arr')
-                np.save(tmp_nm,text_rast_img)
+    #Generate sub sampling of array using smotetek method. 
+    tmp_nm_subsample=os.path.join(text_dir,'texture_imgs_smotetek',tmp_nm)
     
-    
+    if os.path.isfile(tmp_nm_subsample+'.npz'):
         
-    #Flattening image out into shappe method for analysis
-    features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
-                                     text_rast_img.shape[2])
-    label_flat=label.reshape((label.shape[0]*label.shape[1],))
+        tmp_file=np.load(tmp_nm_subsample+'.npz')
+        features_smt=tmp_file['features']
+        label_smt=tmp_file['labels']
+    else:
+        
+        #Load texture image if present
+        if os.path.isfile(tmp_nm+'.npy'):
+            text_rast_img=np.load(tmp_nm+'.npy')
+        else:
+            text_rast_img=gen_texture_img(img,haralick_params)
+            #Including grey level for texture analysis
+            text_rast_img=np.dstack((text_rast_img,img))
+    
+            np.save(tmp_nm,text_rast_img)
+    
+    
+        #Flattening image out into shappe method for analysis
+        features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
+                                         text_rast_img.shape[2])
+        label_flat=label.reshape((label.shape[0]*label.shape[1],))
     
     #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance. 
-    #smt = SMOTETomek(ratio='auto')
-    #features_smt, label_smt = smt.fit_sample(features, label_flat)
+        smt = SMOTETomek(ratio='auto')
+        features_smt, label_smt = smt.fit_sample(features, label_flat)
+        #Saving file name  of SMOTEtek array to folder. 
+        np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
+        
     #Class based subsampling required in order to get this system to operate effectively.
     if train == True:
         #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
         ss_idx = subsample_idx(0, features.shape[0], num_examples)
-        features = features[ss_idx]
-        labels = label_flat[ss_idx]
+        features = features_smt[ss_idx]
+        labels = label_smt[ss_idx]
     else:
         ss_idx = []
         labels = None
@@ -264,18 +276,70 @@ def test_model(X, y, model):
     print ('[RESULTS] F1: %.2f' %f1)
     print ('--------------------------------')
 
-def run_grd_srch(scores):
+def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     """Run grid search for analysis"""
     
         # Set the parameters by cross-validation
     param_grid = [{'C': [1, 10, 100, 1000], 'kernel': ['linear']},
-                   {'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'kernel': ['rbf']}]
+                   {'C': [1, 10, 100, 1000], 'gamma': [0.1,0.01,0.001, 0.0001], 'kernel': ['rbf']}]
     
-
+    assert model_nm=='SVM',"Model  is not the correct type try again grid seach for SVM models only"
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    train_results=[]
+    file_nm_train_report=model_nm+'_train_report_'+timestr
+    for score in scores:
+            
+        
+        clf = GridSearchCV(SVC(), param_grid,cv=3,
+                           scoring='%s_macro' % score)
+        
+        clf.fit(X_train, y_train)
+        #Acquiring final results from particular scoring functoin method for analysis
+        results_dict={'best_parameters':clf.best_params_,
+                     'best_score_':clf.best_score_,
+                     'cv_results_':clf.cv_results_}
+        
+        #Assigning string name for analysis
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        file_nm=model_nm+'_'+score+'_'+timestr
+        file_nm_test_report=model_nm+'_'+score+'_test_report_'+timestr
+        #Writing best model to file directory for models
+        joblib.dump(clf.best_estimator_, os.path.join(model_dir,file_nm))
+        #Appending results to file. 
+        train_results.append(results_dict)
+        print("Best parameters set found on development set:")
+        print()
+        print(clf.best_params_)
+        print()
+        print("Grid scores on development set:")
+        print()
+        means = clf.cv_results_['mean_test_score']
+        stds = clf.cv_results_['std_test_score']
+        for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+            print("%0.3f (+/-%0.03f) for %r"
+                  % (mean, std * 2, params))
+        print()
+        
+        print("Detailed classification report:")
+        print()
+        print("The model is trained on the full development set.")
+        print("The scores are computed on the full evaluation set.")
+        print()
+        y_true, y_pred = y_test, clf.predict(X_test)
+        #Generating report on test data for analysis
+        test_report_raw=classification_report(y_true, y_pred,output_dict=True)
+        test_report_df=pd.DataFrame(test_report_raw).transpose()
+        #Writing best model to file directory for models
+        print(test_report)
+        test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
+        
+    with open(os.path.join(model_dir,file_nm_train_report,'.json'),'w') as fb:
+        json.dump(train_results,fb)
+        
 
 def main(image_train_dir :str, image_test_dir:str,
          text_dir:str ,classifier:str,
-         output_model:str,haralick_param:dict,gridsrch=True):
+         output_model:str,haralick_param:dict,gridsrch=True,svm_hyper_param=None):
 
     start = time.time()
     
@@ -286,9 +350,12 @@ def main(image_train_dir :str, image_test_dir:str,
     if gridsrch==True:
         scores = ['f1', 'jaccard','f1_weighted','jaccard_weighted']
         
+        run_grd_srch(scores,classifier,X_train,y_train,X_test,y_test,output_model)
         
         
+    #If model is runnning perform grid search where appropriate  
     else:
+        assert svm_hyper_param is not None,'No hyper parameter present you cannot train'
         model = train_model(X_train, y_train, classifier)
         test_model(X_test, y_test, model)
         pkl.dump(model, open(output_model, "wb"))
