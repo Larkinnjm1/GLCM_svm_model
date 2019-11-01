@@ -31,7 +31,7 @@ from sklearn.externals import joblib
 
 def check_args(args):
     print(args.image_train_dir)
-
+    
     if not os.path.exists(args.image_train_dir):
         raise ValueError("Image directory does not exist")
 
@@ -52,15 +52,19 @@ def parse_args():
     parser.add_argument("-tst", "--image_test_dir", help="Path to images/mask folder test directory", required=True)
     parser.add_argument('-t','--texture_dir',help='Destination path to texture feature files created during analysis',required=True)
     parser.add_argument("-c", "--classifier", help="Classification model to use", required = True)
-    parser.add_argument("-o", "--output_model", help="Path to save model. Must end in .p", required = True)
+    parser.add_argument("-o", "--output_model_dir", help="Path to save model. Must end in .p", required = True)
     parser.add_argument('-h_lick_p',"--haralick_params",help="Path to json dictionary of haralick features",required=True)
+    parser.add_argument('-model_p',"--model_parameters",help="Path to json model parameters for testing and training",required=False)
+    #parser.add_argument('',"",help="",required=True)
     args = parser.parse_args()
     return check_args(args)
 
-def read_data(image_dir):
+def read_data(bs_dir):
     """The purpose of this method is to read in the dataset for analysis"""
     print ('[INFO] Reading image data.')
-
+    
+    image_dir=os.path.join(bs_dir,'images')
+    
     filelist = glob(os.path.join(image_dir, '*.png'))
 
     file_img_info={}
@@ -169,7 +173,7 @@ def create_features(f_b_name:str,
     tmp_nm=os.path.join(text_dir,'texture_imgs_raw',file_nm)
     
     #Generate sub sampling of array using smotetek method. 
-    tmp_nm_subsample=os.path.join(text_dir,'texture_imgs_smotetek',tmp_nm)
+    tmp_nm_subsample=os.path.join(text_dir,'texture_imgs_smotetek',file_nm)
     
     if os.path.isfile(tmp_nm_subsample+'.npz'):
         
@@ -193,24 +197,38 @@ def create_features(f_b_name:str,
         features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
                                          text_rast_img.shape[2])
         label_flat=label.reshape((label.shape[0]*label.shape[1],))
-    
+        
     #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance. 
         smt = SMOTETomek(ratio='auto')
-        features_smt, label_smt = smt.fit_sample(features, label_flat)
-        #Saving file name  of SMOTEtek array to folder. 
-        np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
+        
+        if np.unique(label_flat).shape[0]>1:
+            
+        
+            features_smt, label_smt = smt.fit_sample(features, label_flat)
+            #Saving file name  of SMOTEtek array to folder. 
+            np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
+        else:
+            np.savez(tmp_nm_subsample, features=features, labels=label_flat)
         
     #Class based subsampling required in order to get this system to operate effectively.
     if train == True:
         #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
-        ss_idx = subsample_idx(0, features.shape[0], num_examples)
-        features = features_smt[ss_idx]
-        labels = label_smt[ss_idx]
+        try:
+            
+            ss_idx = subsample_idx(0, features_smt.shape[0], num_examples)
+            features_ss = features_smt[ss_idx]
+            labels_ss = label_smt[ss_idx]
+        except UnboundLocalError as e:
+            print('Error during sub sampling:',e)
+            ss_idx = subsample_idx(0, features.shape[0], num_examples)
+            features_ss = features[ss_idx]
+            labels_ss = label_flat[ss_idx]
+            
     else:
         ss_idx = []
-        labels = None
+        labels_ss = None
         
-    return features, labels
+    return  features_ss, labels_ss
 
 def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray:
 
@@ -226,12 +244,16 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray
                                            img_arrs['mask'],
                                            haralick_param,
                                            text_dir)
+        
         X.append(features)
         y.append(labels)
 
     X = np.array(X)
+    X=X.reshape(X.shape[0]*X.shape[1],X.shape[2])
     #X = X.reshape(X.shape[0]*X.shape[1], X.shape[2])
     y = np.array(y)
+    y=y.reshape(y.shape[0]*y.shape[1],)
+    ipdb.set_trace()
     #y = y.reshape(y.shape[0]*y.shape[1], y.shape[2]).ravel()
 
     #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -289,7 +311,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     file_nm_train_report=model_nm+'_train_report_'+timestr
     for score in scores:
             
-        
+        ipdb.set_trace()
         clf = GridSearchCV(SVC(), param_grid,cv=3,
                            scoring='%s_macro' % score)
         
@@ -330,7 +352,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         test_report_raw=classification_report(y_true, y_pred,output_dict=True)
         test_report_df=pd.DataFrame(test_report_raw).transpose()
         #Writing best model to file directory for models
-        print(test_report)
+        print(test_report_raw)
         test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
         
     with open(os.path.join(model_dir,file_nm_train_report,'.json'),'w') as fb:
@@ -339,7 +361,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
 
 def main(image_train_dir :str, image_test_dir:str,
          text_dir:str ,classifier:str,
-         output_model:str,haralick_param:dict,gridsrch=True,svm_hyper_param=None):
+         output_model_dir:str,haralick_param:dict,svm_hyper_param=None):
 
     start = time.time()
     
@@ -347,16 +369,19 @@ def main(image_train_dir :str, image_test_dir:str,
     tst_image_dict = read_data(image_test_dir)
     X_train, y_train = create_dataset(trn_image_dict,haralick_param,text_dir)
     X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir)
-    if gridsrch==True:
+    
+    if svm_hyper_param is None:
         scores = ['f1', 'jaccard','f1_weighted','jaccard_weighted']
         
-        run_grd_srch(scores,classifier,X_train,y_train,X_test,y_test,output_model)
-        
-        
+        run_grd_srch(scores,classifier,
+                     X_train,y_train,
+                     X_test,y_test,
+                     output_model_dir)
+
     #If model is runnning perform grid search where appropriate  
     else:
         assert svm_hyper_param is not None,'No hyper parameter present you cannot train'
-        model = train_model(X_train, y_train, classifier)
+        model = train_model(X_train, y_train, classifier,svm_hyper_param)
         test_model(X_test, y_test, model)
         pkl.dump(model, open(output_model, "wb"))
     print ('Processing time:',time.time()-start)
@@ -368,9 +393,17 @@ if __name__ == "__main__":
     text_dir=args.texture_dir
     #ipdb.set_trace()
     classifier = args.classifier
-    output_model = args.output_model
+    output_model_dir = args.output_model_dir
     
     with open(args.haralick_params,'r') as file_read:
-        h_lick_param=json.load(file_read)    
+        h_lick_param=json.load(file_read)   
+        
+    if args.model_parameters is not None:
+        with open(args.model_parameters,'r') as file_read:
+            model_param=json.load(file_read)
+    else:
+        model_param=None
+        
     
-    main(image_train_dir, image_test_dir,text_dir,classifier, output_model,h_lick_param)
+    main(image_train_dir, image_test_dir,text_dir,classifier, output_model_dir,
+         h_lick_param,model_param)
