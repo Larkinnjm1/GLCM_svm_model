@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
 from sklearn.svm import SVC
-
+from sklearn.ensemble import BaggingClassifier
 import time
 #import mahotas as mt
 from scipy import stats
@@ -24,10 +24,15 @@ import imageio
 from haralick_feat_gen import haralick_features
 from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
 from imblearn.combine import SMOTETomek
-
+from sklearn.svm import LinearSVC
+from sklearn.svm import LinearSVR
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import Pipeline
+#from pipelinehelper import PipelineHelper
 from sklearn.externals import joblib
-
-
+from sklearn.multiclass import OneVsRestClassifier
+from pactools.grid_search import GridSearchCVProgressBar
+from sklearn.linear_model import LogisticRegression
 
 def check_args(args):
     print(args.image_train_dir)
@@ -114,8 +119,8 @@ def concat_lst_int(list_int:list,single_chr=False)->str:
         
     return tmp_str_concat
 
-def gen_texture_img(img:imageio.core.util.Array,
-                    haralick_params:dict)->imageio.core.util.Array:
+def gen_texture_img(img:np.ndarray,
+                    haralick_params:dict)->np.ndarray:
     """The purpose of this method is to generate a texture image for a given list of feature parameters and stack them"""
     
     text_rast_img=None
@@ -147,6 +152,7 @@ def gen_text_img_f_name(f_b_name:str,haralick_ftrs_lst:list,single_concat_lst=['
         for k,v in dicts.items():
             
             if k.lower() in single_concat_lst:
+                
                 tmp_str=k[0]+concat_lst_int(v,True)
             else:
                 tmp_str=k[0]+concat_lst_int(v,False)
@@ -160,13 +166,13 @@ def gen_text_img_f_name(f_b_name:str,haralick_ftrs_lst:list,single_concat_lst=['
             
     
 def create_features(f_b_name:str,
-                    img:imageio.core.util.Array,
-                    label:imageio.core.util.Array,
+                    img:np.ndarray,
+                    label:np.ndarray,
                     haralick_params:list,
                     text_dir:str,
                     train=True):
 
-    num_examples = 1000 # number of examples per image to use for training model
+    num_examples = 400 # number of examples per image to use for training model
     #Determine the number of unique values present in the mask
     n_uniq_vals=np.unique(label)
     file_nm=gen_text_img_f_name(f_b_name,haralick_params)
@@ -253,7 +259,7 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray
     #X = X.reshape(X.shape[0]*X.shape[1], X.shape[2])
     y = np.array(y)
     y=y.reshape(y.shape[0]*y.shape[1],)
-    ipdb.set_trace()
+    #ipdb.set_trace()
     #y = y.reshape(y.shape[0]*y.shape[1], y.shape[2]).ravel()
 
     #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -300,62 +306,75 @@ def test_model(X, y, model):
 
 def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     """Run grid search for analysis"""
-    
+    #param_grid={'ovr__C':[1,10,100,1000],'ovr__loss':['epsilon_insensitive','squared_epsilon_insensitive']}
         # Set the parameters by cross-validation
-    param_grid = [{'C': [1, 10, 100, 1000], 'kernel': ['linear']},
-                   {'C': [1, 10, 100, 1000], 'gamma': [0.1,0.01,0.001, 0.0001], 'kernel': ['rbf']}]
+    #param_grid = {'ovr__estimator__base_estimator__C': [10, 100, 1000], 'ovr__estimator__base_estimator__kernel': ['linear']}
+    #param_grid={'ovr__estimator__base_estimator__C': [10, 100, 1000], 'ovr__estimator__base_estimator__gamma': [0.1,0.01,0.001, 0.0001], 'ovr__estimator__base_estimator__kernel': ['rbf']}
     
+    param_grid=[{'ovr__solver':['saga'],'ovr__penalty':['l1', 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']},
+                {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9])},
+                {'ovr__solver':['sag'],'ovr__penalty':[ 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']}]    
+    scaling = MinMaxScaler(feature_range=(0,1)).fit(X_train)
+    X_train = scaling.transform(X_train)
+    X_test = scaling.transform(X_test)    
+   
     assert model_nm=='SVM',"Model  is not the correct type try again grid seach for SVM models only"
     timestr = time.strftime("%Y%m%d-%H%M%S")
     train_results=[]
+    model_nm='log_reg'
     file_nm_train_report=model_nm+'_train_report_'+timestr
     for score in scores:
             
-        ipdb.set_trace()
-        clf = GridSearchCV(SVC(), param_grid,cv=3,
-                           scoring='%s_macro' % score)
-        
-        clf.fit(X_train, y_train)
-        #Acquiring final results from particular scoring functoin method for analysis
-        results_dict={'best_parameters':clf.best_params_,
-                     'best_score_':clf.best_score_,
-                     'cv_results_':clf.cv_results_}
-        
-        #Assigning string name for analysis
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        file_nm=model_nm+'_'+score+'_'+timestr
-        file_nm_test_report=model_nm+'_'+score+'_test_report_'+timestr
+            #svc_pipe = Pipeline([('svc', SVC()),],verbose=True)
+            #BG_pipe = Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True)
+            OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
+        #ipdb.set_trace()
+            clf = GridSearchCVProgressBar(OVR_pipe, param_grid,cv=3,verbose=1,
+                               scoring=score,n_jobs=-1)
+            #Generating grid search rsults for analysis
+            print('Grid seach started for:',score)        
+            clf.fit(X_train, y_train)
+            #Acquiring final results from particular scoring functoin method for analysis
+            results_dict={'best_parameters':clf.best_params_,
+                         'best_score_':clf.best_score_,
+                         'cv_results_':clf.cv_results_}
+            
+            #Assigning string name for analysis
+            timestr = time.strftime("%Y%m%d-%H%M%S")
+            file_nm=model_nm+'_'+score+'_'+timestr
+            file_nm_test_report=file_nm+'_test_report'
+            #Writing best model to file directory for models
+            joblib.dump(clf.best_estimator_, os.path.join(model_dir,file_nm+'_best_model'))
+            #Appending results to file. 
+            file_nm_train_report_score=score+'_'+file_nm_train_report
+            np.save(os.path.join(model_dir,file_nm_train_report_score),results_dict)
+            print("Best parameters set found on development set:")
+            print()
+            print(clf.best_params_)
+            print()
+            print("Grid scores on development set:")
+            print()
+            means = clf.cv_results_['mean_test_score']
+            stds = clf.cv_results_['std_test_score']
+            for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+                print("%0.3f (+/-%0.03f) for %r"
+                      % (mean, std * 2, params))
+            print()
+            
+            print("Detailed classification report:")
+            print()
+            print("The model is trained on the full development set.")
+            print("The scores are computed on the full evaluation set.")
+            print()
+            y_true, y_pred = y_test, clf.predict(X_test)
+            #Generating report on test data for analysis
+            test_report_raw=classification_report(y_true, y_pred,output_dict=True)
+            test_report_df=pd.DataFrame(test_report_raw).transpose()
         #Writing best model to file directory for models
-        joblib.dump(clf.best_estimator_, os.path.join(model_dir,file_nm))
-        #Appending results to file. 
-        train_results.append(results_dict)
-        print("Best parameters set found on development set:")
-        print()
-        print(clf.best_params_)
-        print()
-        print("Grid scores on development set:")
-        print()
-        means = clf.cv_results_['mean_test_score']
-        stds = clf.cv_results_['std_test_score']
-        for mean, std, params in zip(means, stds, clf.cv_results_['params']):
-            print("%0.3f (+/-%0.03f) for %r"
-                  % (mean, std * 2, params))
-        print()
+            print(test_report_raw)
+            test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
         
-        print("Detailed classification report:")
-        print()
-        print("The model is trained on the full development set.")
-        print("The scores are computed on the full evaluation set.")
-        print()
-        y_true, y_pred = y_test, clf.predict(X_test)
-        #Generating report on test data for analysis
-        test_report_raw=classification_report(y_true, y_pred,output_dict=True)
-        test_report_df=pd.DataFrame(test_report_raw).transpose()
-        #Writing best model to file directory for models
-        print(test_report_raw)
-        test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
-        
-    with open(os.path.join(model_dir,file_nm_train_report,'.json'),'w') as fb:
+    with open(os.path.join(model_dir,file_nm_train_report+'.json'),'w') as fb:
         json.dump(train_results,fb)
         
 
@@ -364,15 +383,15 @@ def main(image_train_dir :str, image_test_dir:str,
          output_model_dir:str,haralick_param:dict,svm_hyper_param=None):
 
     start = time.time()
-    
+   
     trn_image_dict = read_data(image_train_dir)
     tst_image_dict = read_data(image_test_dir)
     X_train, y_train = create_dataset(trn_image_dict,haralick_param,text_dir)
     X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir)
     
     if svm_hyper_param is None:
-        scores = ['f1', 'jaccard','f1_weighted','jaccard_weighted']
-        
+        scores = ['f1_weighted','jaccard_macro','jaccard_weighted']#f1macro already completed
+        #scores=['r2']#,'explained_variance_score','neg_mean_absolute_error','neg_mean_squared_error']
         run_grd_srch(scores,classifier,
                      X_train,y_train,
                      X_test,y_test,

@@ -17,7 +17,7 @@ def gen_glob_threshold_img(trl_img1,thresh_sp=0):
 
 def gen_larget_contr(thres_img):
     """the purpose of this method is to find the thresholded image for analysis"""
-    contours, hierarchy = cv2.findContours(thres_img.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    img,contours, hierarchy = cv2.findContours(thres_img.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     
     #find the largest contour in the image for analysis and extraction., 
     contour_sizes = [(cv2.contourArea(contour), contour) for contour in contours]
