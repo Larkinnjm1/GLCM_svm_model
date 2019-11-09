@@ -43,8 +43,8 @@ def check_args(args):
     if not os.path.exists(args.image_test_dir):
         raise ValueError("Label directory does not exist")
 
-    if args.classifier != "SVM" and args.classifier != "RF" and args.classifier != "GBC":
-        raise ValueError("Classifier must be either SVM, RF or GBC")
+    if args.classifier in ["log_reg","SVM","RF","GBC"]:
+        raise ValueError("Classifier must be either Log reg SVM, RF or GBC")
 
     #if args.output_model.split('.')[-1] != "p":
      #   raise ValueError("Model extension must be .p")
@@ -170,9 +170,13 @@ def create_features(f_b_name:str,
                     label:np.ndarray,
                     haralick_params:list,
                     text_dir:str,
+                    model_nm:str,
                     train=True):
-
-    num_examples = 400 # number of examples per image to use for training model
+    
+    if model_nm=='SVM':
+        num_examples=50
+    else:
+        num_examples=500# number of examples per image to use for training model
     #Determine the number of unique values present in the mask
     n_uniq_vals=np.unique(label)
     file_nm=gen_text_img_f_name(f_b_name,haralick_params)
@@ -236,8 +240,8 @@ def create_features(f_b_name:str,
         
     return  features_ss, labels_ss
 
-def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray:
-
+def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->np.ndarray:
+    """Wrapper function which takes model input and generated a dataset size dependent on requires dataset size"""
     print ('[INFO] Creating training dataset on %d image(s).' %len(image_dict.keys()))
 
     X = []
@@ -249,7 +253,8 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str)->np.ndarray
                                            img_arrs['image'],
                                            img_arrs['mask'],
                                            haralick_param,
-                                           text_dir)
+                                           text_dir,
+                                           model_nm)
         
         X.append(features)
         y.append(labels)
@@ -308,28 +313,37 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     """Run grid search for analysis"""
     #param_grid={'ovr__C':[1,10,100,1000],'ovr__loss':['epsilon_insensitive','squared_epsilon_insensitive']}
         # Set the parameters by cross-validation
-    #param_grid = {'ovr__estimator__base_estimator__C': [10, 100, 1000], 'ovr__estimator__base_estimator__kernel': ['linear']}
+    #
     #param_grid={'ovr__estimator__base_estimator__C': [10, 100, 1000], 'ovr__estimator__base_estimator__gamma': [0.1,0.01,0.001, 0.0001], 'ovr__estimator__base_estimator__kernel': ['rbf']}
-    
-    param_grid=[{'ovr__solver':['saga'],'ovr__penalty':['l1', 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']},
-                {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9])},
-                {'ovr__solver':['sag'],'ovr__penalty':[ 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']}]    
-    scaling = MinMaxScaler(feature_range=(0,1)).fit(X_train)
+    if model_nm=='log_reg':
+        param_grid=[{'ovr__solver':['saga'],'ovr__penalty':['l1', 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']},
+                   {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9])},
+                    {'ovr__solver':['sag'],'ovr__penalty':[ 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']}]
+        OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
+        
+    elif model_nm=='SVM':
+        param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
+        OVR_pipe=Pipeline([('ovr',BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50),]))
+    else:
+        raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
+        
+    #Scaling parameters to optimise grid seach performance. 
+    scaling = MinMaxScaler(feature_range=(-1,1)).fit(X_train)
     X_train = scaling.transform(X_train)
     X_test = scaling.transform(X_test)    
    
-    assert model_nm=='SVM',"Model  is not the correct type try again grid seach for SVM models only"
+    
     timestr = time.strftime("%Y%m%d-%H%M%S")
     train_results=[]
-    model_nm='log_reg'
+    
     file_nm_train_report=model_nm+'_train_report_'+timestr
     for score in scores:
             
             #svc_pipe = Pipeline([('svc', SVC()),],verbose=True)
             #BG_pipe = Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True)
-            OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
+            
         #ipdb.set_trace()
-            clf = GridSearchCVProgressBar(OVR_pipe, param_grid,cv=3,verbose=1,
+            clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
                                scoring=score,n_jobs=-1)
             #Generating grid search rsults for analysis
             print('Grid seach started for:',score)        
@@ -386,11 +400,11 @@ def main(image_train_dir :str, image_test_dir:str,
    
     trn_image_dict = read_data(image_train_dir)
     tst_image_dict = read_data(image_test_dir)
-    X_train, y_train = create_dataset(trn_image_dict,haralick_param,text_dir)
-    X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir)
+    X_train, y_train = create_dataset(trn_image_dict,haralick_param,text_dir,classifier)
+    X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir,classifier)
     
     if svm_hyper_param is None:
-        scores = ['f1_weighted','jaccard_macro','jaccard_weighted']#f1macro already completed
+        scores = ['f1_weighted','jaccard_weighted']#f1macro already completed
         #scores=['r2']#,'explained_variance_score','neg_mean_absolute_error','neg_mean_squared_error']
         run_grd_srch(scores,classifier,
                      X_train,y_train,
