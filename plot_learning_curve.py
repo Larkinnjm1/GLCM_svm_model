@@ -15,7 +15,7 @@ from sklearn.model_selection import ShuffleSplit
 from sklearn.svm import SVC
 from sklearn.ensemble import BaggingClassifier
 from sklearn.linear_model import LogisticRegression
-
+import ipdb
 def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None,
                         n_jobs=None, train_sizes=np.linspace(.1, 1.0, 5)):
     """
@@ -71,6 +71,7 @@ def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None,
         be big enough to contain at least one sample from each class.
         (default: np.linspace(0.1, 1.0, 5))
     """
+    #ipdb.set_trace()
     plt.figure()
     plt.title(title)
     if ylim is not None:

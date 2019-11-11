@@ -317,13 +317,14 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     #param_grid={'ovr__estimator__base_estimator__C': [10, 100, 1000], 'ovr__estimator__base_estimator__gamma': [0.1,0.01,0.001, 0.0001], 'ovr__estimator__base_estimator__kernel': ['rbf']}
     if model_nm=='log_reg':
         param_grid=[{'ovr__solver':['saga'],'ovr__penalty':['l1', 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']},
-                   {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9])},
+                   {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],
+                    'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9])},
                     {'ovr__solver':['sag'],'ovr__penalty':[ 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']}]
         OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
         
     elif model_nm=='SVM':
         param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
-:q!        OVR_pipe=Pipeline([('ovr',BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50),]))
+        OVR_pipe=Pipeline([('ovr',BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)),])
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
         
