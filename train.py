@@ -323,7 +323,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         
     elif model_nm=='SVM':
         param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
-        OVR_pipe=Pipeline([('ovr',BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50),]))
+:q!        OVR_pipe=Pipeline([('ovr',BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50),]))
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
         
