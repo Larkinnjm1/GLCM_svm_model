@@ -16,7 +16,7 @@ import sklearn
 from sklearn.ensemble import BaggingClassifier
 from sklearn.linear_model import LogisticRegression 
 from sklearn.svm import SVC
-
+from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 import glob
 import json
@@ -94,7 +94,11 @@ def main(args):
         #Generate training numpy arrays for analysis
         X_train, y_train = create_dataset(trn_image_dict,haralick_params,args.text_dir,data_combos['model_type'])
         X_test, y_test= create_dataset(tst_image_dict,haralick_params,args.text_dir,data_combos['model_type'])
-        
+            
+        scaling = MinMaxScaler(feature_range=(0,1)).fit(X_train)
+        X_train = scaling.transform(X_train)
+        X_test = scaling.transform(X_test)
+ 
         #load data for analysis into dataframe
         tmp_arr_dict=np.load(data_combos['path'],allow_pickle=True)
         tmp_arr_df=tmp_arr_dict.item().get('cv_results_')
@@ -127,10 +131,10 @@ def gen_estimator(model_type:str,model_params:dict)-> sklearn.base.BaseEstimator
     #ipdb.set_trace()
     if model_type.lower()=='svm':
         
-        return BaggingClassifier(base_estimator=SVC(random_state=0,max_iter=1000,**model_params),n_estimators=50)
+        return BaggingClassifier(base_estimator=SVC(random_state=0,max_iter=5000,**model_params),n_estimators=50)
         
     elif model_type.lower()=='log_reg':
-        return LogisticRegression(**model_params)
+        return LogisticRegression(max_iter=5000,**model_params)
     else:
         raise ValueError
     

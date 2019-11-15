@@ -43,7 +43,7 @@ def check_args(args):
     if not os.path.exists(args.image_test_dir):
         raise ValueError("Label directory does not exist")
 
-    if args.classifier in ["log_reg","SVM","RF","GBC"]:
+    if str(args.classifier).lower() not in ["log_reg","svm","rf","gbc"]:
         raise ValueError("Classifier must be either Log reg SVM, RF or GBC")
 
     #if args.output_model.split('.')[-1] != "p":
@@ -329,7 +329,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
         
     #Scaling parameters to optimise grid seach performance. 
-    scaling = MinMaxScaler(feature_range=(-1,1)).fit(X_train)
+    scaling = MinMaxScaler(feature_range=(0,1)).fit(X_train)
     X_train = scaling.transform(X_train)
     X_test = scaling.transform(X_test)    
    
