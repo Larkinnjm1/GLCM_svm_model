@@ -25,7 +25,7 @@ from haralick_feat_gen import haralick_features
 from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
 from imblearn.combine import SMOTETomek
 from sklearn.svm import LinearSVC
-from sklearn.svm import LinearSVR
+
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 #from pipelinehelper import PipelineHelper
@@ -33,6 +33,9 @@ from sklearn.externals import joblib
 from sklearn.multiclass import OneVsRestClassifier
 from pactools.grid_search import GridSearchCVProgressBar
 from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import SGDClassifier
+from sklearn.kernel_approximation import Nystroem
+
 
 def check_args(args):
     print(args.image_train_dir)
@@ -323,8 +326,17 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
         
     elif model_nm=='SVM':
-        param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
-        OVR_pipe=Pipeline([('ovr',BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)),])
+        #param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
+        
+        param_grid=[{'nystreum__gamma':[0.1,1,10,100],'nystreum__n_components':[11,60,300],'nystreum__kernel':['rbf','sigmoid','polynomial'],
+                    'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron']},
+                    {'nystreum__gamma':[0.1,1,10,100],'nystreum__n_components':[11,60,300],'nystreum__kernel':['rbf','sigmoid','polynomial'],'ovr__penalty':['elasticnet'],
+                    'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9]),'ovr__loss':['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron']}]
+            
+        
+        OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
+                         ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),]) #BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)
+            
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
         
