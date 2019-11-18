@@ -17,6 +17,10 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.linear_model import LogisticRegression 
 from sklearn.svm import SVC
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import SGDClassifier
+from sklearn.kernel_approximation import Nystroem
+
 import matplotlib.pyplot as plt
 import glob
 import json
