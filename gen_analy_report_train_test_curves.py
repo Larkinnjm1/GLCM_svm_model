@@ -129,10 +129,15 @@ def main(args):
 def gen_estimator(model_type:str,model_params:dict)-> sklearn.base.BaseEstimator:
     """The purpose of this method is to generate model parameters for analyss """
     #ipdb.set_trace()
-    if model_type.lower()=='svm':
+    if model_type.lower()=='svm_sgd':
         
-        return BaggingClassifier(base_estimator=SVC(random_state=0,max_iter=5000,**model_params),n_estimators=50)
+        OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
+                         ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),])
         
+        return OVR_pipe.set_params(**model_params)
+    
+    elif model_type.lower()=='svm_linear':
+        return BaggingClassifier(base_estimator=SVC(random_state=0,max_iter=5000,**model_params),n_estimators=50) 
     elif model_type.lower()=='log_reg':
         return LogisticRegression(max_iter=5000,**model_params)
     else:
