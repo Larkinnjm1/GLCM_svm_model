@@ -176,10 +176,10 @@ def create_features(f_b_name:str,
                     model_nm:str,
                     train=True):
     
-    if model_nm=='SVM':
-        num_examples=50
+    if model_nm.lower()=='svm':
+        num_examples_perc=0.05
     else:
-        num_examples=500# number of examples per image to use for training model
+        num_examples_perc=0.005# number of examples per image to use for training model
     #Determine the number of unique values present in the mask
     n_uniq_vals=np.unique(label)
     file_nm=gen_text_img_f_name(f_b_name,haralick_params)
@@ -227,8 +227,9 @@ def create_features(f_b_name:str,
     if train == True:
         #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
         try:
-            
-            ss_idx = subsample_idx(0, features_smt.shape[0], num_examples)
+            num_examples=int(features_smt.shape[0]*num_examples_perc)
+           # ipdb.set_trace() 
+            ss_idx = subsample_idx(0, features_smt.shape[0],num_examples)
             features_ss = features_smt[ss_idx]
             labels_ss = label_smt[ss_idx]
         except UnboundLocalError as e:
@@ -247,9 +248,9 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->n
     """Wrapper function which takes model input and generated a dataset size dependent on requires dataset size"""
     print ('[INFO] Creating training dataset on %d image(s).' %len(image_dict.keys()))
 
-    X = []
-    y = []
-
+    X = None
+    y = None
+    
     for f_b_name,img_arrs in image_dict.items():
 
         features, labels = create_features(f_b_name,
@@ -258,15 +259,22 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->n
                                            haralick_param,
                                            text_dir,
                                            model_nm)
-        
-        X.append(features)
-        y.append(labels)
-
-    X = np.array(X)
-    X=X.reshape(X.shape[0]*X.shape[1],X.shape[2])
+        labels=labels[...,np.newaxis]
+        if (X is None) and (y is None):
+            X=features
+            y=labels
+        else:
+            
+            X=np.vstack((X,features))
+            y=np.vstack((y,labels))
+    
+    y=y.squeeze()
+    #ipdb.set_trace()
+    #X = np.array(X)
+    #X=X.reshape(X.shape[0]*X.shape[1],X.shape[2])
     #X = X.reshape(X.shape[0]*X.shape[1], X.shape[2])
-    y = np.array(y)
-    y=y.reshape(y.shape[0]*y.shape[1],)
+    #y = np.array(y)
+    #y=y.reshape(y.shape[0]*y.shape[1],)
     #ipdb.set_trace()
     #y = y.reshape(y.shape[0]*y.shape[1], y.shape[2]).ravel()
 
@@ -328,10 +336,10 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     elif model_nm=='SVM':
         #param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
         
-        param_grid=[{'nystreum__gamma':[0.1,1,10,100],'nystreum__n_components':[11,60,300],'nystreum__kernel':['rbf','sigmoid','polynomial'],
-                    'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron']},
-                    {'nystreum__gamma':[0.1,1,10,100],'nystreum__n_components':[11,60,300],'nystreum__kernel':['rbf','sigmoid','polynomial'],'ovr__penalty':['elasticnet'],
-                    'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9]),'ovr__loss':['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron']}]
+        param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf','sigmoid','polynomial'],
+                    'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
+                    #{'nystreum__gamma':[0.1,1,10,100],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf','sigmoid','polynomial'],'ovr__penalty':['elasticnet'],
+                    #'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9]),'ovr__loss':['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron']}]
             
         
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
