@@ -176,7 +176,7 @@ def create_features(f_b_name:str,
                     model_nm:str,
                     train=True):
     
-    if model_nm.lower()=='svm':
+    if model_nm.lower()=='svm' or model_nm.lower()=='svm_sgd' :
         num_examples_perc=0.05
     else:
         num_examples_perc=0.005# number of examples per image to use for training model

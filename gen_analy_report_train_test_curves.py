@@ -95,7 +95,9 @@ def main(args):
     
     #Iterating through reports for analysis
     for data_combos in train_report_detail:
+        data_combos['model_type']='svm_sgd'
         #Generate training numpy arrays for analysis
+        #ipdb.set_trace()
         X_train, y_train = create_dataset(trn_image_dict,haralick_params,args.text_dir,data_combos['model_type'])
         X_test, y_test= create_dataset(tst_image_dict,haralick_params,args.text_dir,data_combos['model_type'])
             
@@ -113,7 +115,12 @@ def main(args):
         tmp_arr_df.sort_values('rank_test_score',ascending=True,inplace=True)
         trl_arr_df_params_lst=tmp_arr_df['params'][:5].tolist()
         #Restructure file name for analysis
-        model_params_reformat=reformat_model_params(trl_arr_df_params_lst)
+        #ipdb.set_trace()
+        if data_combos['model_type']!='svm_sgd':
+
+            model_params_reformat=reformat_model_params(trl_arr_df_params_lst)
+        else:
+            model_params_reformat=trl_arr_df_params_lst
         #ipdb.set_trace()
         #Taking the top 5 performers forward for running analysis with training and testing curves. 
         for vals in model_params_reformat:
@@ -134,12 +141,14 @@ def gen_estimator(model_type:str,model_params:dict)-> sklearn.base.BaseEstimator
     """The purpose of this method is to generate model parameters for analyss """
     #ipdb.set_trace()
     if model_type.lower()=='svm_sgd':
+
         
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
                          ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),])
-        
-        return OVR_pipe.set_params(**model_params)
-    
+        #ipdb.set_trace()
+        OVR_pipe.set_params(**model_params)
+
+        return OVR_pipe     
     elif model_type.lower()=='svm_linear':
         return BaggingClassifier(base_estimator=SVC(random_state=0,max_iter=5000,**model_params),n_estimators=50) 
     elif model_type.lower()=='log_reg':
