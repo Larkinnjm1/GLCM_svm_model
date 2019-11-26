@@ -1,6 +1,6 @@
-import cv2
+
 import numpy as np
-import pylab as plt
+
 from glob import glob
 import argparse
 import os
@@ -9,13 +9,10 @@ import ipdb
 import pandas as pd
 #import progressbar
 import pickle as pkl
-from numpy.lib import stride_tricks
-from skimage import feature
+
 from sklearn import metrics
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split,GridSearchCV
 from sklearn.metrics import classification_report
-from sklearn.svm import SVC
 from sklearn.ensemble import BaggingClassifier
 import time
 #import mahotas as mt
@@ -24,17 +21,16 @@ import imageio
 from haralick_feat_gen import haralick_features
 from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
 from imblearn.combine import SMOTETomek
-from sklearn.svm import LinearSVC
+from sklearn.svm import LinearSVC, SVC
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 #from pipelinehelper import PipelineHelper
 from sklearn.externals import joblib
 from sklearn.multiclass import OneVsRestClassifier
-from pactools.grid_search import GridSearchCVProgressBar
-from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import SGDClassifier
-from sklearn.kernel_approximation import Nystroem
+from sklearn.linear_model import LogisticRegression,SGDClassifier
+from sklearn.kernel_approximation import Nystroem,AdditiveChi2Sampler
+
 
 
 def check_args(args):
@@ -46,7 +42,7 @@ def check_args(args):
     if not os.path.exists(args.image_test_dir):
         raise ValueError("Label directory does not exist")
 
-    if str(args.classifier).lower() not in ["log_reg","svm","rf","gbc"]:
+    if str(args.classifier).lower() not in ["log_reg","svm_chi","svm_linear","svm_nystrom","rf","gbc"]:
         raise ValueError("Classifier must be either Log reg SVM, RF or GBC")
 
     #if args.output_model.split('.')[-1] != "p":
@@ -176,7 +172,7 @@ def create_features(f_b_name:str,
                     model_nm:str,
                     train=True):
     
-    if model_nm.lower()=='svm' or model_nm.lower()=='svm_sgd' :
+    if model_nm.lower() in ["svm_chi","svm_linear","svm_nystrom"]:
         num_examples_perc=0.05
     else:
         num_examples_perc=0.005# number of examples per image to use for training model
@@ -333,8 +329,8 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
                     {'ovr__solver':['sag'],'ovr__penalty':[ 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']}]
         OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
         
-    elif model_nm=='SVM':
-        #param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
+    elif model_nm.lower()=='svm_nystrom':
+        #
         
         param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf','sigmoid','polynomial'],
                     'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
@@ -344,6 +340,20 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
                          ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),]) #BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)
+            
+    elif model_nm.lower()=='svm_linear':
+        param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
+        
+        svc_pipe = Pipeline([('svc', SVC()),],verbose=True)
+        
+        OVR_pipe=Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True) 
+        
+    elif model_nm.lower()=='svm_chi':
+        param_grid=[{'chi_sqr__sample_steps':[1,2,3],
+                    'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
+            
+        OVR_pipe=Pipeline([('chi_sqr',AdditiveChi2Sampler()),
+                         ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),]) 
             
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
@@ -360,7 +370,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     file_nm_train_report=model_nm+'_train_report_'+timestr
     for score in scores:
             
-            #svc_pipe = Pipeline([('svc', SVC()),],verbose=True)
+            #
             #BG_pipe = Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True)
             
         #ipdb.set_trace()
