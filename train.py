@@ -54,7 +54,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-trn", "--image_train_dir" , help="Path to images/mask folder training directory", required=True)
     parser.add_argument("-tst", "--image_test_dir", help="Path to images/mask folder test directory", required=True)
-    parser.add_argument('-t','--texture_dir',help='Destination path to texture feature files created during analysis',required=True)
+    parser.add_argument('-txt','--texture_dir',help='Destination path to texture feature files created during analysis',required=True)
     parser.add_argument("-c", "--classifier", help="Classification model to use", required = True)
     parser.add_argument("-o", "--output_model_dir", help="Path to save model. Must end in .p", required = True)
     parser.add_argument('-h_lick_p',"--haralick_params",help="Path to json dictionary of haralick features",required=True)
@@ -169,26 +169,28 @@ def create_features(f_b_name:str,
                     label:np.ndarray,
                     haralick_params:list,
                     text_dir:str,
-                    model_nm:str,
+                    model_nm=None,
                     train=True):
     
+    #Model name dictates the sampling procedure
     if model_nm.lower() in ["svm_chi","svm_linear","svm_nystrom"]:
         num_examples_perc=0.05
     else:
         num_examples_perc=0.005# number of examples per image to use for training model
-    #Determine the number of unique values present in the mask
-    n_uniq_vals=np.unique(label)
+    #Determine the number of unique values present in the mask 
+    
+    #Geneating texture image if filename required. 
     file_nm=gen_text_img_f_name(f_b_name,haralick_params)
     tmp_nm=os.path.join(text_dir,'texture_imgs_raw',file_nm)
     
     #Generate sub sampling of array using smotetek method. 
     tmp_nm_subsample=os.path.join(text_dir,'texture_imgs_smotetek',file_nm)
     
-    if os.path.isfile(tmp_nm_subsample+'.npz'):
+    if train==True and os.path.isfile(tmp_nm_subsample+'.npz'):
         
         tmp_file=np.load(tmp_nm_subsample+'.npz')
         features_smt=tmp_file['features']
-        label_smt=tmp_file['labels']
+        
     else:
         
         #Load texture image if present
@@ -205,36 +207,37 @@ def create_features(f_b_name:str,
         #Flattening image out into shappe method for analysis
         features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
                                          text_rast_img.shape[2])
-        label_flat=label.reshape((label.shape[0]*label.shape[1],))
+
         
-    #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance. 
-        smt = SMOTETomek(ratio='auto')
-        
-        if np.unique(label_flat).shape[0]>1:
+        #Class based subsampling required in order to get this system to operate effectively.
+        if train == True:
             
-        
-            features_smt, label_smt = smt.fit_sample(features, label_flat)
-            #Saving file name  of SMOTEtek array to folder. 
-            np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
-        else:
-            np.savez(tmp_nm_subsample, features=features, labels=label_flat)
-        
-    #Class based subsampling required in order to get this system to operate effectively.
-    if train == True:
-        #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
-        try:
-            num_examples=int(features_smt.shape[0]*num_examples_perc)
-           # ipdb.set_trace() 
-            ss_idx = subsample_idx(0, features_smt.shape[0],num_examples)
-            features_ss = features_smt[ss_idx]
-            labels_ss = label_smt[ss_idx]
-        except UnboundLocalError as e:
-            print('Error during sub sampling:',e)
-            ss_idx = subsample_idx(0, features.shape[0], num_examples)
-            features_ss = features[ss_idx]
-            labels_ss = label_flat[ss_idx]
+            label_flat=label.reshape((label.shape[0]*label.shape[1],))
+            smt = SMOTETomek(ratio='auto')
+            #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance.
+            if np.unique(label_flat).shape[0]>1:
+                
+                features_smt, label_smt = smt.fit_sample(features, label_flat)
+                #Saving file name  of SMOTEtek array to folder. 
+                np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
+            else:
+                np.savez(tmp_nm_subsample, features=features, labels=label_flat)
+            
+            #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
+            try:
+                num_examples=int(features_smt.shape[0]*num_examples_perc)
+               # ipdb.set_trace() 
+                ss_idx = subsample_idx(0, features_smt.shape[0],num_examples)
+                features_ss = features_smt[ss_idx]
+                labels_ss = label_smt[ss_idx]
+            except UnboundLocalError as e:
+                print('Error during sub sampling:',e)
+                ss_idx = subsample_idx(0, features.shape[0], num_examples)
+                features_ss = features[ss_idx]
+                labels_ss = label_flat[ss_idx]
             
     else:
+        label_flat=None
         ss_idx = []
         labels_ss = None
         
@@ -265,16 +268,6 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->n
             y=np.vstack((y,labels))
     
     y=y.squeeze()
-    #ipdb.set_trace()
-    #X = np.array(X)
-    #X=X.reshape(X.shape[0]*X.shape[1],X.shape[2])
-    #X = X.reshape(X.shape[0]*X.shape[1], X.shape[2])
-    #y = np.array(y)
-    #y=y.reshape(y.shape[0]*y.shape[1],)
-    #ipdb.set_trace()
-    #y = y.reshape(y.shape[0]*y.shape[1], y.shape[2]).ravel()
-
-    #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
  
     print ('[INFO] Feature vector size:', X.shape)
 
@@ -316,12 +309,9 @@ def test_model(X, y, model):
     print ('[RESULTS] F1: %.2f' %f1)
     print ('--------------------------------')
 
-def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
-    """Run grid search for analysis"""
-    #param_grid={'ovr__C':[1,10,100,1000],'ovr__loss':['epsilon_insensitive','squared_epsilon_insensitive']}
-        # Set the parameters by cross-validation
-    #
-    #param_grid={'ovr__estimator__base_estimator__C': [10, 100, 1000], 'ovr__estimator__base_estimator__gamma': [0.1,0.01,0.001, 0.0001], 'ovr__estimator__base_estimator__kernel': ['rbf']}
+def gen_pipeline(model_nm):
+    """Generating pipeline of results based on grid search parameters required. """
+    #TODO include argument for paramgrid as json for further use and refactor code into a simplified loop. 
     if model_nm=='log_reg':
         param_grid=[{'ovr__solver':['saga'],'ovr__penalty':['l1', 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']},
                    {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],
@@ -334,9 +324,6 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         
         param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf','sigmoid','polynomial'],
                     'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
-                    #{'nystreum__gamma':[0.1,1,10,100],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf','sigmoid','polynomial'],'ovr__penalty':['elasticnet'],
-                    #'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9]),'ovr__loss':['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron']}]
-            
         
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
                          ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),]) #BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)
@@ -358,70 +345,102 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
         
-    #Scaling parameters to optimise grid seach performance. 
-    scaling = MinMaxScaler(feature_range=(0,1)).fit(X_train)
-    X_train = scaling.transform(X_train)
-    X_test = scaling.transform(X_test)    
-   
+    return OVR_pipe,param_grid
+
+def min_max_scaling(X_train,X_test,min_sp=0,max_sp=1,neg_switch=True):
     
-    timestr = time.strftime("%Y%m%d-%H%M%S")
+    scaling = MinMaxScaler(feature_range=(min_sp,max_sp)).fit(X_train)
+    X_train = scaling.transform(X_train)
+    X_test = scaling.transform(X_test)  
+    #some values become slightly negative reassign to 0
+    if np.sum(np.array(X_test.flatten()) <0, axis=0)<10:
+        X_test=np.where(X_test<0,0,X_test)
+    else:
+        raise ValueError('Too many negative values please review x test versus X_train')
+    
+    return X_train,X_test
+
+def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
+    """Run grid search for analysis"""
+
+    ipdb.set_trace()    
+    #Scaling parameters to optimise grid seach performance. 
+    X_train,X_test=min_max_scaling(X_train,X_test)
+    
+    #Generating pipeline and parameter grid for analysis
+    OVR_pipe,param_grid=gen_pipeline(model_nm)
+    
     train_results=[]
     
-    file_nm_train_report=model_nm+'_train_report_'+timestr
     for score in scores:
-            
-            #
-            #BG_pipe = Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True)
-            
+        
         #ipdb.set_trace()
-            clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
-                               scoring=score,n_jobs=-1)
-            #Generating grid search rsults for analysis
-            print('Grid seach started for:',score)        
-            clf.fit(X_train, y_train)
-            #Acquiring final results from particular scoring functoin method for analysis
-            results_dict={'best_parameters':clf.best_params_,
+        #Perform grid seach across model for analysis
+        model_grd=perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train)
+        #Acquiring final results from particular scoring functoin method for analysis
+         #Assigning string name for analysis
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        file_nm=model_nm+'_'+score+'_'+timestr
+        prnt_result_scrn(model_grd)
+        
+        #Generating training and test results for evaluation. 
+        tmp_res_dict=gen_train_report(model_grd,model_dir,file_nm)
+        gen_test_report(model_grd,y_test,X_test,model_dir,file_nm)
+        
+        #Append temporary results dictoinary
+        train_results.append(tmp_res_dict)
+        
+    with open(os.path.join(model_dir,file_nm+'_summary_aggregated_training_report'+'.json'),'w') as fb:
+        json.dump(train_results,fb)
+
+def prnt_result_scrn(clf):
+    #printing results to screen following grid search
+    means = clf.cv_results_['mean_test_score']
+    stds = clf.cv_results_['std_test_score']
+    for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+        print("%0.3f (+/-%0.03f) for %r"
+              % (mean, std * 2, params))
+    
+
+def gen_train_report(clf,model_dir,file_nm):
+    
+    results_dict={'best_parameters':clf.best_params_,
                          'best_score_':clf.best_score_,
                          'cv_results_':clf.cv_results_}
-            
-            #Assigning string name for analysis
-            timestr = time.strftime("%Y%m%d-%H%M%S")
-            file_nm=model_nm+'_'+score+'_'+timestr
-            file_nm_test_report=file_nm+'_test_report'
-            #Writing best model to file directory for models
-            joblib.dump(clf.best_estimator_, os.path.join(model_dir,file_nm+'_best_model'))
-            #Appending results to file. 
-            file_nm_train_report_score=score+'_'+file_nm_train_report
-            np.save(os.path.join(model_dir,file_nm_train_report_score),results_dict)
-            print("Best parameters set found on development set:")
-            print()
-            print(clf.best_params_)
-            print()
-            print("Grid scores on development set:")
-            print()
-            means = clf.cv_results_['mean_test_score']
-            stds = clf.cv_results_['std_test_score']
-            for mean, std, params in zip(means, stds, clf.cv_results_['params']):
-                print("%0.3f (+/-%0.03f) for %r"
-                      % (mean, std * 2, params))
-            print()
-            
-            print("Detailed classification report:")
-            print()
-            print("The model is trained on the full development set.")
-            print("The scores are computed on the full evaluation set.")
-            print()
-            y_true, y_pred = y_test, clf.predict(X_test)
-            #Generating report on test data for analysis
-            test_report_raw=classification_report(y_true, y_pred,output_dict=True)
-            test_report_df=pd.DataFrame(test_report_raw).transpose()
-        #Writing best model to file directory for models
-            print(test_report_raw)
-            test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
         
-    with open(os.path.join(model_dir,file_nm_train_report+'.json'),'w') as fb:
-        json.dump(train_results,fb)
-        
+    file_nm_train_report=file_nm+'_train_report'
+    #Writing best model to file directory for models
+    joblib.dump(clf.best_estimator_, os.path.join(model_dir,file_nm+'_best_model'))
+    #Appending results to file. 
+    
+    np.save(os.path.join(model_dir,file_nm_train_report),results_dict)
+    return results_dict
+
+
+def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train):
+    #Performing grid search wrt to training and test data with parameter grid already defined.
+    clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
+                               scoring=score,n_jobs=-1)
+    #Generating grid search rsults for analysis
+    print('Grid seach started for:',score)        
+    clf.fit(X_train, y_train)
+    
+    return clf
+            
+
+def gen_test_report(clf,y_test,X_test,model_dir,file_nm):
+    #Writing test report to file
+    y_true, y_pred = y_test, clf.predict(X_test)
+    
+    file_nm_test_report=file_nm+'_test_report'
+    #Generating report on test data for analysis
+    test_report_raw=classification_report(y_true, y_pred,output_dict=True)
+    test_report_df=pd.DataFrame(test_report_raw).transpose()
+    #Writing best model to file directory for models
+    print(test_report_raw)
+    test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
+
+      
 
 def main(image_train_dir :str, image_test_dir:str,
          text_dir:str ,classifier:str,

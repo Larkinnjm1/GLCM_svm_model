@@ -7,6 +7,10 @@ import os
 import pickle as pkl
 import train
 import math
+from joblib import dump, load
+import pathlib
+from sklearn.preprocessing import MinMaxScaler
+from train import create_features
 
 def check_args(args):
 
@@ -20,23 +24,26 @@ def check_args(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--image_dir" , help="Path to images", required=True)
+    parser.add_argument("-txt", "--txt_image_dir" , help="Path to images", required=False)
+    parser.add_argument("-i", "--image_dir" , help="Path to images", required=False)
     parser.add_argument("-m", "--model_path", help="Path to .p model", required=True)
     parser.add_argument("-o", "--output_dir", help="Path to output directory", required = True)
     args = parser.parse_args()
     return check_args(args)
 
-def create_features(img):
+def create_features(f_nm,img,args):
 
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_blnk = np.zeros(img.shape)
 
-    features, _ = train.create_features(img, img_gray, label=None, train=False)
+    features, _ = create_features(f_nm,img,img_blnk,args.txt_image_dir, label=None, train=False)
 
     return features
 
 def compute_prediction(img, model):
-
-    border = 5 # (haralick neighbourhood - 1) / 2
+    
+    img_reshp=img.reshape((img.shape[0]*image.shape[1],image.shape[2]))
+    
+    
 
     img = cv2.copyMakeBorder(img, top=border, bottom=border, \
                                   left=border, right=border, \
@@ -52,11 +59,11 @@ def compute_prediction(img, model):
 
 def infer_images(image_dir, model_path, output_dir):
 
-    filelist = glob(os.path.join(image_dir,'*.jpg'))
+    txt_filelist = list(pathlib.Path(image_dir).rglob('*.npy'))
 
     print ('[INFO] Running inference on %s test images' %len(filelist))
 
-    model = pkl.load(open( model_path, "rb" ) )
+    model = load(model_path)
 
     for file in filelist:
         print ('[INFO] Processing images:', os.path.basename(file))
