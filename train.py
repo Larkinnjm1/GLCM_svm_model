@@ -354,7 +354,7 @@ def gen_pipeline(model_nm):
         param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf'],
                     'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']},
             {'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['sigmoid','polynomial'],
-                    'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
+                    'ovr__penalty':['l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
         
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
                          ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),]) #BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)
@@ -452,10 +452,16 @@ def gen_train_report(clf,model_dir,file_nm):
     return results_dict
 
 
-def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train):
+def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train,
+                  weights=np.array([ 0.20937129,  6.25282567, 56.52863436, 55.61599307, 35.46404574])):
     #Performing grid search wrt to training and test data with parameter grid already defined.
-    clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
-                               scoring=score,n_jobs=-1)
+    if score.find('weight')!=-1:
+        
+        clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
+                                   scoring=score,n_jobs=-1,sample_weight=weights)
+    else:
+        clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
+                                   scoring=score,n_jobs=-1)
     #Generating grid search rsults for analysis
     print('Grid seach started for:',score)        
     clf.fit(X_train, y_train)
@@ -489,7 +495,7 @@ def main(image_train_dir :str, image_test_dir:str,
     X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir,classifier)
     
     if svm_hyper_param is None:
-        scores = ['f1_weighted','jaccard_weighted']#f1macro already completed
+        scores = ['f1_macro','f1_weighted']#f1macro already completed
         #scores=['r2']#,'explained_variance_score','neg_mean_absolute_error','neg_mean_squared_error']
         run_grd_srch(scores,classifier,
                      X_train,y_train,
