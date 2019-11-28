@@ -182,66 +182,95 @@ def create_features(f_b_name:str,
     #Geneating texture image if filename required. 
     file_nm=gen_text_img_f_name(f_b_name,haralick_params)
     tmp_nm=os.path.join(text_dir,'texture_imgs_raw',file_nm)
-    
     #Generate sub sampling of array using smotetek method. 
     tmp_nm_subsample=os.path.join(text_dir,'texture_imgs_smotetek',file_nm)
     
-    if train==True and os.path.isfile(tmp_nm_subsample+'.npz'):
+    if train==True:
+        features,label_flat=gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample)
+
+    else:
+        features,label_flat=gen_txt_feat(tmp_nm,img,label,haralick_params)
+        
+    
+    return  features,label_flat
+
+def gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample):
+    """Purpose of this wrapper function is to provide sub sampled SMOTE data for training. """
+    #If file already exists perform subsampling. 
+    if os.path.isfile(tmp_nm_subsample+'.npz'):
         
         tmp_file=np.load(tmp_nm_subsample+'.npz')
+        
         features_smt=tmp_file['features']
-        
+        labels_smt=tmp_file['labels']
+              
     else:
+        features,label_flat=gen_txt_feat(tmp_nm,img,label,haralick_params)
+        features_smt,labels_smt=gen_smote_labls(features,label_flat)
         
-        #Load texture image if present
-        if os.path.isfile(tmp_nm+'.npy'):
-            text_rast_img=np.load(tmp_nm+'.npy')
-        else:
-            text_rast_img=gen_texture_img(img,haralick_params)
-            #Including grey level for texture analysis
-            text_rast_img=np.dstack((text_rast_img,img))
     
-            np.save(tmp_nm,text_rast_img)
+    features_ss,labels_ss=sub_sample_wrapper(features_smt,
+                                             labels_smt,
+                                             num_examples_perc)
     
+    return features_ss,labels_ss
+
+def gen_txt_feat(tmp_nm,img,label,haralick_params):
     
+    #Load texture image if present
+    text_rast_img=gen_text_img(tmp_nm,img,haralick_params)
         #Flattening image out into shappe method for analysis
-        features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
+    features = text_rast_img.reshape(text_rast_img.shape[0]*text_rast_img.shape[1],
                                          text_rast_img.shape[2])
 
-        
-        #Class based subsampling required in order to get this system to operate effectively.
-        if train == True:
-            
-            label_flat=label.reshape((label.shape[0]*label.shape[1],))
-            smt = SMOTETomek(ratio='auto')
-            #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance.
-            if np.unique(label_flat).shape[0]>1:
-                
-                features_smt, label_smt = smt.fit_sample(features, label_flat)
-                #Saving file name  of SMOTEtek array to folder. 
-                np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
-            else:
-                np.savez(tmp_nm_subsample, features=features, labels=label_flat)
-            
-            #Randomly sample from feature setpost class rebalancing usign SMOTE TOMEK process
-            try:
-                num_examples=int(features_smt.shape[0]*num_examples_perc)
-               # ipdb.set_trace() 
-                ss_idx = subsample_idx(0, features_smt.shape[0],num_examples)
-                features_ss = features_smt[ss_idx]
-                labels_ss = label_smt[ss_idx]
-            except UnboundLocalError as e:
-                print('Error during sub sampling:',e)
-                ss_idx = subsample_idx(0, features.shape[0], num_examples)
-                features_ss = features[ss_idx]
-                labels_ss = label_flat[ss_idx]
-            
+    #Class based subsampling required in order to get this system to operate effectively.
+    label_flat=label.reshape((label.shape[0]*label.shape[1],))
+    
+    return features,label_flat
+
+def gen_text_img(tmp_nm,img,haralick_params):
+    
+    if os.path.isfile(tmp_nm+'.npy'):
+            text_rast_img=np.load(tmp_nm+'.npy')
     else:
-        label_flat=None
-        ss_idx = []
-        labels_ss = None
+        text_rast_img=gen_texture_img(img,haralick_params)
+        #Including grey level for texture analysis
+        text_rast_img=np.dstack((text_rast_img,img))
         
-    return  features_ss, labels_ss
+        np.save(tmp_nm,text_rast_img)
+       
+    return text_rast_img
+
+def sub_sample_wrapper(features_smt,label_smt,num_examples_perc):
+    """Wrapper function to perform subsampling of features and labels"""
+    #try:
+    num_examples=int(features_smt.shape[0]*num_examples_perc)
+   # ipdb.set_trace() 
+    ss_idx = subsample_idx(0, features_smt.shape[0],num_examples)
+    features_ss = features_smt[ss_idx]
+    labels_ss = label_smt[ss_idx]
+    #except UnboundLocalError as e:
+     #   print('Error during sub sampling:',e)
+      #  ss_idx = subsample_idx(0, features.shape[0], num_examples)
+       # features_ss = features[ss_idx]
+        #labels_ss = label_flat[ss_idx]
+    
+    return features_ss,labels_ss
+
+def gen_smote_labls(features,label_flat):
+    
+    smt = SMOTETomek(ratio='auto')
+    #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance.
+    #Perform only smote if more than one class label is present in the image. 
+    if np.unique(label_flat).shape[0]>1:
+        
+        features_smt, label_smt = smt.fit_sample(features, label_flat)
+        #Saving file name  of SMOTEtek array to folder. 
+        np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
+    else:
+        np.savez(tmp_nm_subsample, features=features, labels=label_flat)
+        
+    return features_smt,label_smt
 
 def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->np.ndarray:
     """Wrapper function which takes model input and generated a dataset size dependent on requires dataset size"""
@@ -322,7 +351,9 @@ def gen_pipeline(model_nm):
     elif model_nm.lower()=='svm_nystrom':
         #
         
-        param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf','sigmoid','polynomial'],
+        param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf'],
+                    'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']},
+            {'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['sigmoid','polynomial'],
                     'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
         
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
@@ -347,23 +378,27 @@ def gen_pipeline(model_nm):
         
     return OVR_pipe,param_grid
 
-def min_max_scaling(X_train,X_test,min_sp=0,max_sp=1,neg_switch=True):
+def min_max_scaling(X_train,X_test=None,min_sp=0,max_sp=1,neg_switch=True):
     
     scaling = MinMaxScaler(feature_range=(min_sp,max_sp)).fit(X_train)
     X_train = scaling.transform(X_train)
-    X_test = scaling.transform(X_test)  
-    #some values become slightly negative reassign to 0
-    if np.sum(np.array(X_test.flatten()) <0, axis=0)<10:
-        X_test=np.where(X_test<0,0,X_test)
+    if X_test is None:
+        pass
     else:
-        raise ValueError('Too many negative values please review x test versus X_train')
-    
+        
+        X_test = scaling.transform(X_test)  
+        #some values become slightly negative reassign to 0
+        if np.sum(np.array(X_test.flatten()) <0, axis=0)<10:
+            X_test=np.where(X_test<0,0,X_test)
+        else:
+            raise ValueError('Too many negative values please review x test versus X_train')
+        
     return X_train,X_test
 
 def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     """Run grid search for analysis"""
 
-    ipdb.set_trace()    
+    #ipdb.set_trace()    
     #Scaling parameters to optimise grid seach performance. 
     X_train,X_test=min_max_scaling(X_train,X_test)
     
