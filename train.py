@@ -420,7 +420,12 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         
         #Generating training and test results for evaluation. 
         tmp_res_dict=gen_train_report(model_grd,model_dir,file_nm)
-        gen_test_report(model_grd,y_test,X_test,model_dir,file_nm)
+        
+        
+        gen_test_report(model_grd,y_train,X_train,model_dir,
+                        file_nm,'_train_report_per_cls')
+        gen_test_report(model_grd,y_test,X_test,
+                        model_dir,file_nm)
         
         #Append temporary results dictoinary
         train_results.append(tmp_res_dict)
@@ -455,7 +460,7 @@ def gen_train_report(clf,model_dir,file_nm):
 def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train,
                   weights=np.array([ 0.20937129,  6.25282567, 56.52863436, 55.61599307, 35.46404574])):
     #Performing grid search wrt to training and test data with parameter grid already defined.
-    if score.find('weight')!=-1:
+    if score.lower().find('weight')!=-1:
         
         clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
                                    scoring=score,n_jobs=-1,sample_weight=weights)
@@ -469,11 +474,11 @@ def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train,
     return clf
             
 
-def gen_test_report(clf,y_test,X_test,model_dir,file_nm):
+def gen_test_report(clf,y_test,X_test,model_dir,file_nm,sub_str='_test_report_per_cls'):
     #Writing test report to file
     y_true, y_pred = y_test, clf.predict(X_test)
     
-    file_nm_test_report=file_nm+'_test_report'
+    file_nm_test_report=file_nm+sub_str
     #Generating report on test data for analysis
     test_report_raw=classification_report(y_true, y_pred,output_dict=True)
     test_report_df=pd.DataFrame(test_report_raw).transpose()
