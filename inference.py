@@ -39,10 +39,10 @@ def parse_args():
 
 def compute_prediction(img,model):
     
-    
     predictions = model.predict(img)
     
     return predictions
+
 def infer_images(image_dir, model_path, output_dir,args):
 
     filelist = list(pathlib.Path(os.path.join(image_dir,'images')).rglob('*.png'))
@@ -56,11 +56,53 @@ def infer_images(image_dir, model_path, output_dir,args):
     per_img_f1_score={}
     for idx,file in enumerate(filelist):
         f_b_name=os.path.basename(file)
-        print ('[INFO] Processing images:',f_b_name)
         
-        tmp_img=imageio.imread(file)
-        #replace from left to right path to masks. for opening up labels image.  
-        tmp_labl=imageio.imread('masks'.join(str(file).rsplit('images',1)))
+        print ('[INFO] Processing images:',f_b_name)
+        #If file name already exists pass and process forward. 
+        predictions,labls=gen_predictions(file,h_lick_p,args,model)
+
+        #f1 score performance metrics 
+        per_img_f1_score[f_b_name]=calc_f1_scr(labls,predictions,f_b_name)
+                   
+            #record intermittent results for analysis to ensure per class information is not lost. 
+        if idx%5==0:
+            
+            timestr = time.strftime("%Y%m%d-%H%M%S")
+            with open(os.path.join(output_dir,'f1score_per_cls'+timestr+'.pickle'),'wb') as fb:
+                pickle.dump(per_img_f1_score,fb)
+
+def calc_f1_scr(labls,predictions,f_b_name,
+                 label_dict={'background':0,'liver':63,'l_kidney':126,'r_kidney':189,'spleen':252}):
+    #ipdb.set_trace()
+    #Get per image resultsPer class performance
+    per_cls_f1_scr=f1_score(labls,predictions,average=None,
+                            labels=list(label_dict.values()))
+    
+    #Uniq labels across both predictions and labls
+    labls_present=np.unique(np.concatenate((labls,predictions)))
+    #Getting nan values if colour is not present i mask
+    per_cls_f1_scr_dict={k:(x if x in labls_present else 'NaN') for k,x in label_dict.items()}
+    #returning final values if x is present 
+    per_cls_f1_scr_dict={k:(x if x=='NaN' else per_cls_f1_scr[i]) for i,(k,x) in enumerate(per_cls_f1_scr_dict.items())}
+    
+    return {'per_class':per_cls_f1_scr_dict,
+                    'non_weighted_average':f1_score(labls,predictions,average='macro')}
+
+def gen_predictions(file,h_lick_p,args,model):
+    
+    f_b_name=os.path.basename(file)
+    dst_f_path=os.path.join(output_dir,'mask_pred_'+f_b_name)
+    
+    #Get image and file
+    tmp_img,tmp_labl=get_mask_n_img_f(file)
+    #If file is present for prediction just read in and return else generate
+    #texture features and image from scratch where required
+    if os.path.isfile(dst_f_path):
+        
+        return imageio.imread(dst_f_path).flatten(),tmp_labl.flatten()
+        
+    else:
+        #Generate features for model based on initial analysis. 
         features,labls = create_features(os.path.splitext(f_b_name)[0],
                                                tmp_img,
                                                tmp_labl,
@@ -71,24 +113,25 @@ def infer_images(image_dir, model_path, output_dir,args):
         #Minx max scaling same parameters taken from training script 
         features,_=min_max_scaling(features)
         
-        predictions = compute_prediction(features, model)
-        inference_img = predictions.reshape((tmp_img.shape[0], tmp_img.shape[1]))
-        #f1 score performance metrics 
-        #Per class performance
+        predictions=compute_prediction(features, model)
         
+        write_img_to_file(predictions,tmp_img,dst_f_path)
         
-        #Get per image results
-        per_img_f1_score[f_b_name]={'per_class':f1_score(labls,predictions,average=None),
-                        'non_weighted_average':f1_score(labls,predictions,average='macro')}
-        imageio.imwrite(os.path.join(output_dir,'mask_pred_'+f_b_name),inference_img)
-        #record intermittent results for analysis to ensure per class information is not lost. 
-        if idx%5==0:
-            
-            timestr = time.strftime("%Y%m%d-%H%M%S")
-            with open(os.path.join(output_dir,'f1score_per_cls'+timestr+'.pickle'),'wb') as fb:
-                pickle.dump(per_img_f1_score,fb)
-                
+        return predictions.flatten(),labls
 
+def write_img_to_file(predictions,tmp_img,dst_f_path):
+    #Writing final image to file following prediction
+    inference_img = predictions.reshape((tmp_img.shape[0], tmp_img.shape[1]))
+    imageio.imwrite(dst_f_path,inference_img)
+
+def get_mask_n_img_f(file):
+    
+   tmp_img=imageio.imread(file)
+            #replace from left to right path to masks. for opening up labels image.  
+   tmp_labl=imageio.imread('masks'.join(str(file).rsplit('images',1)))                
+   
+   return tmp_img,tmp_labl
+   
 def main(image_dir, model_path, output_dir,args):
 
     infer_images(image_dir, model_path, output_dir,args)
