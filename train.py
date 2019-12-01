@@ -61,6 +61,8 @@ def parse_args():
     parser.add_argument('-model_p',"--model_parameters",help="Path to json model parameters for testing and training",required=False)
     parser.add_argument('-smt_b','--smotetomek_bool',help="selection of smote and tomek for analysis",required=False,
                         default=True,type=bool)
+    parser.add_argument('-cls_wght',"--cls_weights",required=False,
+                        default=np.array([ 0.20937129,  6.25282567, 56.52863436, 55.61599307, 35.46404574],type=np.ndarray))
     #parser.add_argument('',"",help="",required=True)
     args = parser.parse_args()
     return check_args(args)
@@ -369,7 +371,7 @@ def gen_pipeline(args):
         
         svc_pipe = Pipeline([('svc', SVC()),],verbose=True)
         
-        OVR_pipe=Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True) 
+        OVR_pipe=Pipeline([('ovr', BaggingClassifier(svc_pipe)),],verbose=True) 
         
     elif args.classifier.lower()=='svm_chi':
         param_grid=[{'chi_sqr__sample_steps':[1,2,3],
@@ -380,6 +382,9 @@ def gen_pipeline(args):
             
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
+    ipdb.set_trace()
+    if args.cls_weights is not None:
+        [x.update(args.cls_weights) for x in param_grid]
         
     return OVR_pipe,param_grid
 
@@ -396,7 +401,7 @@ def min_max_scaling(X_train,X_test=None,min_sp=0,max_sp=1,neg_switch=True):
         if np.sum(np.array(X_test.flatten()) <0, axis=0)<10:
             X_test=np.where(X_test<0,0,X_test)
         else:
-            raise ValueError('Too many negative values please review x test versus X_train')
+            raise ValueError('Greater than 10 negative values please review x test versus X_train rescaling')
         
     return X_train,X_test
 
