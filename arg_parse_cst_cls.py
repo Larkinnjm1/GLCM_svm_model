@@ -5,6 +5,10 @@ Created on Sun Dec  1 20:31:06 2019
 @author: aczd087
 """
 
+import argparse
+import numpy as np
+
+
 class Store_as_array(argparse._StoreAction):
     def __call__(self, parser, namespace, values, option_string=None):
         values = np.array(values)
