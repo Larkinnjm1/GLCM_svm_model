@@ -30,7 +30,7 @@ from sklearn.externals import joblib
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.linear_model import LogisticRegression,SGDClassifier
 from sklearn.kernel_approximation import Nystroem,AdditiveChi2Sampler
-
+from arg_parse_cst_cls import Store_as_array
 
 
 def check_args(args):
@@ -61,9 +61,10 @@ def parse_args():
     parser.add_argument('-model_p',"--model_parameters",help="Path to json model parameters for testing and training",required=False)
     parser.add_argument('-smt_b','--smotetomek_bool',help="selection of smote and tomek for analysis",required=False,
                         default=True,type=bool)
-    parser.add_argument('-cls_wght',"--cls_weights",required=False,
-                        default=np.array([ 0.20937129,  6.25282567, 56.52863436, 55.61599307, 35.46404574],type=np.ndarray))
+    #Special argument converts list of numbers to numpy array
+    parser.add_argument('-cls_wght',"--cls_weights",action=Store_as_array, type=list,required=False)
     #parser.add_argument('',"",help="",required=True)
+    ipdb.set_trace()
     args = parser.parse_args()
     return check_args(args)
 
