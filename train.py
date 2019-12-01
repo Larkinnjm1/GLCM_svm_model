@@ -62,7 +62,7 @@ def parse_args():
     parser.add_argument('-smt_b','--smotetomek_bool',help="selection of smote and tomek for analysis",required=False,
                         default=True,type=bool)
     #Special argument converts list of numbers to numpy array
-    parser.add_argument('-cls_wght',"--cls_weights",action=Store_as_array, type=list,required=False)
+    parser.add_argument('-cls_wght',"--cls_weights",action=Store_as_array,nargs='+', type=int,required=False)
     #parser.add_argument('',"",help="",required=True)
     ipdb.set_trace()
     args = parser.parse_args()
