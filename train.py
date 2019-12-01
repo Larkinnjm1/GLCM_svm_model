@@ -383,7 +383,7 @@ def gen_pipeline(args):
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
     ipdb.set_trace()
-    if args.cls_weights is not None:
+    if args.smotetomek_bool==False:
         [x.update(args.cls_weights) for x in param_grid]
         
     return OVR_pipe,param_grid
