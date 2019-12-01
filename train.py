@@ -54,11 +54,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-trn", "--image_train_dir" , help="Path to images/mask folder training directory", required=True)
     parser.add_argument("-tst", "--image_test_dir", help="Path to images/mask folder test directory", required=True)
-    parser.add_argument('-txt','--texture_dir',help='Destination path to texture feature files created during analysis',required=True)
+    parser.add_argument('-txt','--text_dir',help='Destination path to texture feature files created during analysis',required=True)
     parser.add_argument("-c", "--classifier", help="Classification model to use", required = True)
     parser.add_argument("-o", "--output_model_dir", help="Path to save model. Must end in .p", required = True)
     parser.add_argument('-h_lick_p',"--haralick_params",help="Path to json dictionary of haralick features",required=True)
     parser.add_argument('-model_p',"--model_parameters",help="Path to json model parameters for testing and training",required=False)
+    parser.add_argument('-smt_b','--smotetomek_bool',help="selection of smote and tomek for analysis",required=False,
+                        default=True,type=bool)
     #parser.add_argument('',"",help="",required=True)
     args = parser.parse_args()
     return check_args(args)
@@ -168,12 +170,11 @@ def create_features(f_b_name:str,
                     img:np.ndarray,
                     label:np.ndarray,
                     haralick_params:list,
-                    text_dir:str,
-                    model_nm=None,
+                    args,
                     train=True):
     
     #Model name dictates the sampling procedure
-    if model_nm.lower() in ["svm_chi","svm_linear","svm_nystrom"]:
+    if args.classifier.lower() in ["svm_chi","svm_linear","svm_nystrom"]:
         num_examples_perc=0.05
     else:
         num_examples_perc=0.005# number of examples per image to use for training model
@@ -181,12 +182,12 @@ def create_features(f_b_name:str,
     
     #Geneating texture image if filename required. 
     file_nm=gen_text_img_f_name(f_b_name,haralick_params)
-    tmp_nm=os.path.join(text_dir,'texture_imgs_raw',file_nm)
+    tmp_nm=os.path.join(args.text_dir,'texture_imgs_raw',file_nm)
     #Generate sub sampling of array using smotetek method. 
-    tmp_nm_subsample=os.path.join(text_dir,'texture_imgs_smotetek',file_nm)
+    tmp_nm_subsample=os.path.join(args.text_dir,'texture_imgs_smotetek',file_nm)
     
     if train==True:
-        features,label_flat=gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample)
+        features,label_flat=gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample,args)
 
     else:
         features,label_flat=gen_txt_feat(tmp_nm,img,label,haralick_params)
@@ -194,19 +195,24 @@ def create_features(f_b_name:str,
     
     return  features,label_flat
 
-def gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample):
+def gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample,args):
     """Purpose of this wrapper function is to provide sub sampled SMOTE data for training. """
     #If file already exists perform subsampling. 
-    if os.path.isfile(tmp_nm_subsample+'.npz'):
+    
+    features_smt,labels_smt=gen_txt_feat(tmp_nm,img,label,haralick_params)
+    
+    if args.smotetomek_bool==True:
         
-        tmp_file=np.load(tmp_nm_subsample+'.npz')
-        
-        features_smt=tmp_file['features']
-        labels_smt=tmp_file['labels']
-              
-    else:
-        features,label_flat=gen_txt_feat(tmp_nm,img,label,haralick_params)
-        features_smt,labels_smt=gen_smote_labls(features,label_flat)
+        if os.path.isfile(tmp_nm_subsample+'.npz'):
+            
+            tmp_file=np.load(tmp_nm_subsample+'.npz')
+            
+            features_smt=tmp_file['features']
+            labels_smt=tmp_file['labels']
+                  
+        else:
+            #reprocessing final features with new smote distributions
+            features_smt,labels_smt=gen_smote_labls(features_smt,labels_smt,tmp_nm_subsample)
         
     
     features_ss,labels_ss=sub_sample_wrapper(features_smt,
@@ -257,7 +263,7 @@ def sub_sample_wrapper(features_smt,label_smt,num_examples_perc):
     
     return features_ss,labels_ss
 
-def gen_smote_labls(features,label_flat):
+def gen_smote_labls(features,label_flat,tmp_nm_subsample):
     
     smt = SMOTETomek(ratio='auto')
     #Performing SMOTE TOMEK over under sampling to boost performance due to class imbalance.
@@ -272,7 +278,7 @@ def gen_smote_labls(features,label_flat):
         
     return features_smt,label_smt
 
-def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->np.ndarray:
+def create_dataset(image_dict:dict,haralick_param:list,args)->np.ndarray:
     """Wrapper function which takes model input and generated a dataset size dependent on requires dataset size"""
     print ('[INFO] Creating training dataset on %d image(s).' %len(image_dict.keys()))
 
@@ -285,8 +291,7 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->n
                                            img_arrs['image'],
                                            img_arrs['mask'],
                                            haralick_param,
-                                           text_dir,
-                                           model_nm)
+                                           args)
         labels=labels[...,np.newaxis]
         if (X is None) and (y is None):
             X=features
@@ -300,7 +305,7 @@ def create_dataset(image_dict:dict,haralick_param:list,text_dir:str,model_nm)->n
  
     print ('[INFO] Feature vector size:', X.shape)
 
-    return X,y#X_train, X_test, y_train, y_test
+    return X,y
 
 def train_model(X:np.ndarray, y:np.ndarray, classifier:str):
 
@@ -324,7 +329,7 @@ def train_model(X:np.ndarray, y:np.ndarray, classifier:str):
     return model
 
 def test_model(X, y, model):
-
+    #TODO incorporate inference py models into this section for better evaluation and performance. 
     pred = model.predict(X)
     precision = metrics.precision_score(y, pred, average='weighted', labels=np.unique(pred))
     recall = metrics.recall_score(y, pred, average='weighted', labels=np.unique(pred))
@@ -338,17 +343,17 @@ def test_model(X, y, model):
     print ('[RESULTS] F1: %.2f' %f1)
     print ('--------------------------------')
 
-def gen_pipeline(model_nm):
+def gen_pipeline(args):
     """Generating pipeline of results based on grid search parameters required. """
     #TODO include argument for paramgrid as json for further use and refactor code into a simplified loop. 
-    if model_nm=='log_reg':
+    if args.classifier.lower()=='log_reg':
         param_grid=[{'ovr__solver':['saga'],'ovr__penalty':['l1', 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']},
                    {'ovr__solver':['saga'],'ovr__penalty':['elasticnet'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial'],
                     'ovr__l1_ratio':np.array([0.1,0.3,0.5,0.9])},
                     {'ovr__solver':['sag'],'ovr__penalty':[ 'l2'],'ovr__C':np.logspace(0, 4, 10),'ovr__multi_class':['ovr','multinomial']}]
         OVR_pipe=Pipeline([('ovr',LogisticRegression(random_state=0,max_iter=1000)),]) 
         
-    elif model_nm.lower()=='svm_nystrom':
+    elif args.classifier.lower()=='svm_nystrom':
         #
         
         param_grid=[{'nystreum__gamma':[100,10,1,0.1],'nystreum__n_components':[300,60,11],'nystreum__kernel':['rbf'],
@@ -359,14 +364,14 @@ def gen_pipeline(model_nm):
         OVR_pipe=Pipeline([('nystreum',Nystroem(random_state=1)),
                          ('ovr',SGDClassifier(max_iter=5000, tol=1e-3)),]) #BaggingClassifier(SVC(random_state=0,max_iter=1000),n_estimators=50)
             
-    elif model_nm.lower()=='svm_linear':
+    elif args.classifier.lower()=='svm_linear':
         param_grid = {'ovr__base_estimator__C': [10, 100, 1000], 'ovr__base_estimator__kernel': ['linear']}
         
         svc_pipe = Pipeline([('svc', SVC()),],verbose=True)
         
         OVR_pipe=Pipeline([('bag', BaggingClassifier(svc_pipe)),],verbose=True) 
         
-    elif model_nm.lower()=='svm_chi':
+    elif args.classifier.lower()=='svm_chi':
         param_grid=[{'chi_sqr__sample_steps':[1,2,3],
                     'ovr__penalty':['l1', 'l2'],'ovr__loss':['hinge', 'modified_huber', 'perceptron']}]
             
@@ -395,7 +400,7 @@ def min_max_scaling(X_train,X_test=None,min_sp=0,max_sp=1,neg_switch=True):
         
     return X_train,X_test
 
-def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
+def run_grd_srch(scores,args,X_train,y_train,X_test,y_test):
     """Run grid search for analysis"""
 
     #ipdb.set_trace()    
@@ -403,7 +408,7 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
     X_train,X_test=min_max_scaling(X_train,X_test)
     
     #Generating pipeline and parameter grid for analysis
-    OVR_pipe,param_grid=gen_pipeline(model_nm)
+    OVR_pipe,param_grid=gen_pipeline(args)
     
     train_results=[]
     
@@ -415,22 +420,22 @@ def run_grd_srch(scores,model_nm,X_train,y_train,X_test,y_test,model_dir):
         #Acquiring final results from particular scoring functoin method for analysis
          #Assigning string name for analysis
         timestr = time.strftime("%Y%m%d-%H%M%S")
-        file_nm=model_nm+'_'+score+'_'+timestr
+        file_nm=args.classifier+'_'+score+'_'+timestr
         prnt_result_scrn(model_grd)
         
         #Generating training and test results for evaluation. 
-        tmp_res_dict=gen_train_report(model_grd,model_dir,file_nm)
+        tmp_res_dict=gen_train_report(model_grd,args,file_nm)
         
         
-        gen_test_report(model_grd,y_train,X_train,model_dir,
+        gen_test_report(model_grd,y_train,X_train,args,
                         file_nm,'_train_report_per_cls')
         gen_test_report(model_grd,y_test,X_test,
-                        model_dir,file_nm)
+                        args,file_nm)
         
         #Append temporary results dictoinary
         train_results.append(tmp_res_dict)
         
-    with open(os.path.join(model_dir,file_nm+'_summary_aggregated_training_report'+'.json'),'w') as fb:
+    with open(os.path.join(args.output_model_dir,file_nm+'_summary_aggregated_training_report'+'.json'),'w') as fb:
         json.dump(train_results,fb)
 
 def prnt_result_scrn(clf):
@@ -442,7 +447,7 @@ def prnt_result_scrn(clf):
               % (mean, std * 2, params))
     
 
-def gen_train_report(clf,model_dir,file_nm):
+def gen_train_report(clf,args,file_nm):
     
     results_dict={'best_parameters':clf.best_params_,
                          'best_score_':clf.best_score_,
@@ -450,10 +455,10 @@ def gen_train_report(clf,model_dir,file_nm):
         
     file_nm_train_report=file_nm+'_train_report'
     #Writing best model to file directory for models
-    joblib.dump(clf.best_estimator_, os.path.join(model_dir,file_nm+'_best_model'))
+    joblib.dump(clf.best_estimator_, os.path.join(args.output_model_dir,file_nm+'_best_model'))
     #Appending results to file. 
     
-    np.save(os.path.join(model_dir,file_nm_train_report),results_dict)
+    np.save(os.path.join(args.output_model_dir,file_nm_train_report),results_dict)
     return results_dict
 
 
@@ -474,7 +479,7 @@ def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train,
     return clf
             
 
-def gen_test_report(clf,y_test,X_test,model_dir,file_nm,sub_str='_test_report_per_cls'):
+def gen_test_report(clf,y_test,X_test,args,file_nm,sub_str='_test_report_per_cls'):
     #Writing test report to file
     y_true, y_pred = y_test, clf.predict(X_test)
     
@@ -484,45 +489,37 @@ def gen_test_report(clf,y_test,X_test,model_dir,file_nm,sub_str='_test_report_pe
     test_report_df=pd.DataFrame(test_report_raw).transpose()
     #Writing best model to file directory for models
     print(test_report_raw)
-    test_report_df.to_csv(os.path.join(model_dir,file_nm_test_report))
+    test_report_df.to_csv(os.path.join(args.output_model_dir,file_nm_test_report))
 
       
 
-def main(image_train_dir :str, image_test_dir:str,
-         text_dir:str ,classifier:str,
-         output_model_dir:str,haralick_param:dict,svm_hyper_param=None):
+def main(args,haralick_param:dict,svm_hyper_param=None):
 
     start = time.time()
    
-    trn_image_dict = read_data(image_train_dir)
-    tst_image_dict = read_data(image_test_dir)
-    X_train, y_train = create_dataset(trn_image_dict,haralick_param,text_dir,classifier)
-    X_test, y_test= create_dataset(tst_image_dict,haralick_param,text_dir,classifier)
+    trn_image_dict = read_data(args.image_train_dir)
+    tst_image_dict = read_data(args.image_test_dir)
+    X_train, y_train = create_dataset(trn_image_dict,haralick_param,args)
+    X_test, y_test= create_dataset(tst_image_dict,haralick_param,args)
     
     if svm_hyper_param is None:
         scores = ['f1_macro','f1_weighted']#f1macro already completed
         #scores=['r2']#,'explained_variance_score','neg_mean_absolute_error','neg_mean_squared_error']
-        run_grd_srch(scores,classifier,
+        run_grd_srch(scores,args,
                      X_train,y_train,
-                     X_test,y_test,
-                     output_model_dir)
+                     X_test,y_test)
 
     #If model is runnning perform grid search where appropriate  
     else:
         assert svm_hyper_param is not None,'No hyper parameter present you cannot train'
-        model = train_model(X_train, y_train, classifier,svm_hyper_param)
+        model = train_model(X_train, y_train, args.classifier,svm_hyper_param)
         test_model(X_test, y_test, model)
-        pkl.dump(model, open(output_model, "wb"))
+        pkl.dump(model, open(model, "wb"))
     print ('Processing time:',time.time()-start)
 
 if __name__ == "__main__":
     args = parse_args()
-    image_train_dir = args.image_train_dir
-    image_test_dir = args.image_test_dir
-    text_dir=args.texture_dir
     #ipdb.set_trace()
-    classifier = args.classifier
-    output_model_dir = args.output_model_dir
     
     with open(args.haralick_params,'r') as file_read:
         h_lick_param=json.load(file_read)   
@@ -534,5 +531,4 @@ if __name__ == "__main__":
         model_param=None
         
     
-    main(image_train_dir, image_test_dir,text_dir,classifier, output_model_dir,
-         h_lick_param,model_param)
+    main(args,h_lick_param,model_param)
