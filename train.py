@@ -62,7 +62,8 @@ def parse_args():
     parser.add_argument('-smt_b','--smotetomek_bool',help="selection of smote and tomek for analysis",required=False,
                         default=True,type=bool)
     #Special argument converts list of numbers to numpy array
-    parser.add_argument('-cls_wght',"--cls_weights",action='append',nargs='+', type=int,required=False)
+    parser.add_argument('-cls_wght_b',"--cls_weights_bool", type=bool,
+                        required=False,default=False)
     #parser.add_argument('',"",help="",required=True)
     ipdb.set_trace()
     args = parser.parse_args()
@@ -176,11 +177,7 @@ def create_features(f_b_name:str,
                     args,
                     train=True):
     
-    #Model name dictates the sampling procedure
-    if args.classifier.lower() in ["svm_chi","svm_linear","svm_nystrom"]:
-        num_examples_perc=0.05
-    else:
-        num_examples_perc=0.005# number of examples per image to use for training model
+    
     #Determine the number of unique values present in the mask 
     
     #Geneating texture image if filename required. 
@@ -190,6 +187,13 @@ def create_features(f_b_name:str,
     tmp_nm_subsample=os.path.join(args.text_dir,'texture_imgs_smotetek',file_nm)
     
     if train==True:
+        
+        #Model name dictates the sampling procedure
+        if args.classifier.lower() in ["svm_chi","svm_linear","svm_nystrom"]:
+            num_examples_perc=0.05
+        else:
+            num_examples_perc=0.005
+        
         features,label_flat=gen_train_txt_data(img,label,haralick_params,num_examples_perc,tmp_nm,tmp_nm_subsample,args)
 
     else:
@@ -384,7 +388,8 @@ def gen_pipeline(args):
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
     ipdb.set_trace()
-    if args.smotetomek_bool==False:
+    if args.cls_weights_bool==True:
+        tmp_dict={'ovr__class_weights':'balanced'}
         [x.update(args.cls_weights) for x in param_grid]
         
     return OVR_pipe,param_grid

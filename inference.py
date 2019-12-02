@@ -28,7 +28,7 @@ def check_args(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-txt", "--txt_image_dir" , help="Path to images", required=False)
+    parser.add_argument("-txt", "--text_dir" , help="Path to images", required=False)
     parser.add_argument("-h_lick_p","--haralick_params",help='path to json for haralick parameters',required=False)
     parser.add_argument("-i", "--image_dir" , help="Path to images", required=False)
     parser.add_argument("-m", "--model_path", help="Path to .p model", required=True)
@@ -115,8 +115,7 @@ def gen_predictions(file,h_lick_p,args,model):
                                                tmp_img,
                                                tmp_labl,
                                                h_lick_p,
-                                               args.txt_image_dir,
-                                               model_nm='N/A',
+                                               args,
                                                train=False)
         #Minx max scaling same parameters taken from training script 
         features,_=min_max_scaling(features)
