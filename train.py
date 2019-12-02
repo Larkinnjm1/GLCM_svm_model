@@ -390,7 +390,7 @@ def gen_pipeline(args):
     ipdb.set_trace()
     if args.cls_weights_bool==True:
         tmp_dict={'ovr__class_weights':'balanced'}
-        [x.update(args.cls_weights) for x in param_grid]
+        [x.update(tmp_dict) for x in param_grid]
         
     return OVR_pipe,param_grid
 
