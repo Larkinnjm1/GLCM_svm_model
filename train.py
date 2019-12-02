@@ -389,7 +389,7 @@ def gen_pipeline(args):
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
     ipdb.set_trace()
     if args.cls_weights_bool==True:
-        tmp_dict={'ovr__class_weights':'balanced'}
+        tmp_dict={'ovr__class_weights':['balanced']}
         [x.update(tmp_dict) for x in param_grid]
         
     return OVR_pipe,param_grid
