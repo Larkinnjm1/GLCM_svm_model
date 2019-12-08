@@ -65,7 +65,7 @@ def parse_args():
     parser.add_argument('-cls_wght_b',"--cls_weights_bool", type=bool,
                         required=False,default=False)
     #parser.add_argument('',"",help="",required=True)
-    ipdb.set_trace()
+    #ipdb.set_trace()
     args = parser.parse_args()
     return check_args(args)
 
@@ -389,7 +389,7 @@ def gen_pipeline(args):
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
     ipdb.set_trace()
     if args.cls_weights_bool==True:
-        tmp_dict={'ovr__class_weights':['balanced']}
+        tmp_dict={'ovr__class_weight':['balanced']}
         [x.update(tmp_dict) for x in param_grid]
         
     return OVR_pipe,param_grid
@@ -401,7 +401,7 @@ def min_max_scaling(X_train,X_test=None,min_sp=0,max_sp=1,neg_switch=True):
     if X_test is None:
         pass
     else:
-        
+        ipdb.set_trace() 
         X_test = scaling.transform(X_test)  
         #some values become slightly negative reassign to 0
         if np.sum(np.array(X_test.flatten()) <0, axis=0)<10:
