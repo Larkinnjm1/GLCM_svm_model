@@ -33,6 +33,7 @@ def parse_args():
     parser.add_argument("-i", "--image_dir" , help="Path to images", required=False)
     parser.add_argument("-m", "--model_path", help="Path to .p model", required=True)
     parser.add_argument("-o", "--output_dir", help="Path to output directory", required = True)
+    parser.add_argument("-p","--pt_str",help="sub strings for specific patients",required=True,type=str)
     args = parser.parse_args()
     return check_args(args)
 
@@ -46,6 +47,19 @@ def compute_prediction(img,model):
 def infer_images(image_dir, model_path, output_dir,args):
 
     filelist = list(pathlib.Path(os.path.join(image_dir,'images')).rglob('*.png'))
+    filelist=[str(x) for x in filelist]
+
+  
+ #opening patient specific substrings
+    with open(args.pt_str,'r') as fb:
+        fl_lst=[]
+        for line in fb:
+            line=line.strip()
+            fl_lst.append(line)
+
+    #ipdb.set_trace()
+    #Taking ony files that match patient specific substrings
+    filelist=[x for x in filelist if any(x.find(y)!=-1 for y in fl_lst)]  
 
     print ('[INFO] Running inference on %s test images' %len(filelist))
     
@@ -67,7 +81,7 @@ def infer_images(image_dir, model_path, output_dir,args):
         per_img_f1_score.append(tmp_dict)
         #ipdb.set_trace()
         #record intermittent results for analysis to ensure per class information is not lost. 
-        if idx%5==0:
+        if idx%100==0:
             
             timestr = time.strftime("%Y%m%d-%H%M%S")
             with open(os.path.join(output_dir,'f1score_per_cls'+timestr+'.pickle'),'wb') as fb:

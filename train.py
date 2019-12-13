@@ -11,6 +11,7 @@ import pandas as pd
 import pickle as pkl
 
 from sklearn import metrics
+from pandas_ml import ConfusionMatrix
 from sklearn.model_selection import train_test_split,GridSearchCV
 from sklearn.metrics import classification_report
 from sklearn.ensemble import BaggingClassifier
@@ -20,7 +21,7 @@ from scipy import stats
 import imageio
 from haralick_feat_gen import haralick_features
 from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
-from imblearn.combine import SMOTETomek
+#from imblearn.combine import SMOTETomek
 from sklearn.svm import LinearSVC, SVC
 
 from sklearn.preprocessing import MinMaxScaler
@@ -65,6 +66,8 @@ def parse_args():
     parser.add_argument('-cls_wght_b',"--cls_weights_bool", type=bool,
                         required=False,default=False)
     #parser.add_argument('',"",help="",required=True)
+    parser.add_argument('-f_nm',"--f_nm_str", type=str,
+                        required=True,default='imgs_cls')
     #ipdb.set_trace()
     args = parser.parse_args()
     return check_args(args)
@@ -280,10 +283,12 @@ def gen_smote_labls(features,label_flat,tmp_nm_subsample):
         features_smt, label_smt = smt.fit_sample(features, label_flat)
         #Saving file name  of SMOTEtek array to folder. 
         np.savez(tmp_nm_subsample, features=features_smt, labels=label_smt)
+        
+        return features_smt,label_smt
     else:
         np.savez(tmp_nm_subsample, features=features, labels=label_flat)
         
-    return features_smt,label_smt
+        return features,label_flat
 
 def create_dataset(image_dict:dict,haralick_param:list,args)->np.ndarray:
     """Wrapper function which takes model input and generated a dataset size dependent on requires dataset size"""
@@ -316,11 +321,11 @@ def create_dataset(image_dict:dict,haralick_param:list,args)->np.ndarray:
 
 def train_model(X:np.ndarray, y:np.ndarray, classifier:str):
 
-    if classifier == "SVM":
-        from sklearn.svm import SVC
+    if classifier == "svm_nystrom":
+        OVR_pipe=Pipeline([('nystreum',Nystroem(gamma=10,n_components=300,kernel='rbf',random_state=1)),
+                         ('ovr',SGDClassifier(max_iter=5000, tol=1e-3,penalty='l1',loss='modified_huber',class_weight='balanced')),])
         print ('[INFO] Training Support Vector Machine model.')
-        model = SVC(class_weights='balanced')
-        model.fit(X, y)
+        OVR_pipe.fit(X, y)
     elif classifier == "RF":
         from sklearn.ensemble import RandomForestClassifier
         print ('[INFO] Training Random Forest model.')
@@ -332,8 +337,8 @@ def train_model(X:np.ndarray, y:np.ndarray, classifier:str):
         model.fit(X, y)
 
     print ('[INFO] Model training complete.')
-    print ('[INFO] Training Accuracy: %.2f' %model.score(X, y))
-    return model
+    print ('[INFO] Training Accuracy: %.2f' %OVR_pipe.score(X, y))
+    return OVR_pipe
 
 def test_model(X, y, model):
     #TODO incorporate inference py models into this section for better evaluation and performance. 
@@ -387,36 +392,48 @@ def gen_pipeline(args):
             
     else:
         raise Exception("Grid seach is only possible for SVM and Logistic regression classifiers.")
-    ipdb.set_trace()
+    #ipdb.set_trace()
     if args.cls_weights_bool==True:
         tmp_dict={'ovr__class_weight':['balanced']}
         [x.update(tmp_dict) for x in param_grid]
         
     return OVR_pipe,param_grid
 
+def scaler_func():
+    """The purpose of this method is to perform scaling between the two parameters"""
+
 def min_max_scaling(X_train,X_test=None,min_sp=0,max_sp=1,neg_switch=True):
+    #ipdb.set_trace()
+   
+    if (X_test is None) or (X_test.shape[0]<X_train.shape[0]):
+        scaling = MinMaxScaler(feature_range=(min_sp,max_sp)).fit(X_train)
+    else:
+        scaling = MinMaxScaler(feature_range=(min_sp,max_sp)).fit(X_test)
     
-    scaling = MinMaxScaler(feature_range=(min_sp,max_sp)).fit(X_train)
+    #Getting X_training variable 
     X_train = scaling.transform(X_train)
+   
+    #ipdb.set_trace()
     if X_test is None:
         pass
     else:
-        ipdb.set_trace() 
         X_test = scaling.transform(X_test)  
         #some values become slightly negative reassign to 0
         if np.sum(np.array(X_test.flatten()) <0, axis=0)<10:
             X_test=np.where(X_test<0,0,X_test)
         else:
             raise ValueError('Greater than 10 negative values please review x test versus X_train rescaling')
-        
+        if np.sum(np.array(X_train.flatten()) <0, axis=0)<10:
+            X_train=np.where(X_train<0,0,X_train)
+        else:
+            raise ValueError('Greater than 10 negative values please review x test versus X_train rescaling')
+
     return X_train,X_test
 
 def run_grd_srch(scores,args,X_train,y_train,X_test,y_test):
     """Run grid search for analysis"""
 
     #ipdb.set_trace()    
-    #Scaling parameters to optimise grid seach performance. 
-    X_train,X_test=min_max_scaling(X_train,X_test)
     
     #Generating pipeline and parameter grid for analysis
     OVR_pipe,param_grid=gen_pipeline(args)
@@ -473,15 +490,10 @@ def gen_train_report(clf,args,file_nm):
     return results_dict
 
 
-def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train,
-                  weights=np.array([ 0.20937129,  6.25282567, 56.52863436, 55.61599307, 35.46404574])):
+def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train):
     #Performing grid search wrt to training and test data with parameter grid already defined.
-    if score.lower().find('weight')!=-1:
-        
-        clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
-                                   scoring=score,n_jobs=-1,sample_weight=weights)
-    else:
-        clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
+    
+    clf = GridSearchCV(OVR_pipe, param_grid,cv=3,verbose=10,
                                    scoring=score,n_jobs=-1)
     #Generating grid search rsults for analysis
     print('Grid seach started for:',score)        
@@ -490,31 +502,43 @@ def perf_grd_srch(OVR_pipe,param_grid,score,X_train, y_train,
     return clf
             
 
-def gen_test_report(clf,y_test,X_test,args,file_nm,sub_str='_test_report_per_cls'):
+def gen_test_report(clf,y_test,X_test,args,sub_str='_test_report_per_cls'):
     #Writing test report to file
     y_true, y_pred = y_test, clf.predict(X_test)
+    #ipdb.set_trace()
+    #Producing pandas ML confusion matrix and statistical summary
+    tmp_confusion_matrix=ConfusionMatrix(y_true,y_pred)
+    #tmp_stat_summary=tmp_confusion_matrix.stats()
+    tmp_confusion_matrix=tmp_confusion_matrix.to_dataframe()
+    tmp_confusion_matrix.to_csv(os.path.join(args.output_model_dir,
+                                                args.f_nm_str+'_confusion_matrix'))
+    #Generation dictionary for analysis 
+    #with open(os.path.join(args.output_model_dir,args.f_nm_str+'_descriptive_stat.pickle')) as fb:
+     #   pickle.dump(tmp_stat_summary,fb)
     
-    file_nm_test_report=file_nm+sub_str
+    file_nm_test_report=args.f_nm_str+sub_str
     #Generating report on test data for analysis
     test_report_raw=classification_report(y_true, y_pred,output_dict=True)
     test_report_df=pd.DataFrame(test_report_raw).transpose()
     #Writing best model to file directory for models
     print(test_report_raw)
     test_report_df.to_csv(os.path.join(args.output_model_dir,file_nm_test_report))
-
       
 
 def main(args,haralick_param:dict,svm_hyper_param=None):
-
+    svm_hyper_param='present'
     start = time.time()
    
     trn_image_dict = read_data(args.image_train_dir)
     tst_image_dict = read_data(args.image_test_dir)
     X_train, y_train = create_dataset(trn_image_dict,haralick_param,args)
     X_test, y_test= create_dataset(tst_image_dict,haralick_param,args)
-    
+
+    #Scaling parameters to optimise grid seach performance. 
+    X_train,X_test=min_max_scaling(X_train,X_test)
+   
     if svm_hyper_param is None:
-        scores = ['f1_macro','f1_weighted']#f1macro already completed
+        scores = ['f1_weighted']#f1macro already completed
         #scores=['r2']#,'explained_variance_score','neg_mean_absolute_error','neg_mean_squared_error']
         run_grd_srch(scores,args,
                      X_train,y_train,
@@ -523,9 +547,13 @@ def main(args,haralick_param:dict,svm_hyper_param=None):
     #If model is runnning perform grid search where appropriate  
     else:
         assert svm_hyper_param is not None,'No hyper parameter present you cannot train'
-        model = train_model(X_train, y_train, args.classifier,svm_hyper_param)
-        test_model(X_test, y_test, model)
-        pkl.dump(model, open(model, "wb"))
+        model = train_model(X_train, y_train, args.classifier)
+        
+        joblib.dump(model, os.path.join(args.output_model_dir,'model_'+args.f_nm_str))
+        
+        gen_test_report(model,y_test,X_test,args)
+        
+        gen_test_report(model,y_train,X_train,args)
     print ('Processing time:',time.time()-start)
 
 if __name__ == "__main__":
