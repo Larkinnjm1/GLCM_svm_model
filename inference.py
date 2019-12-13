@@ -15,6 +15,7 @@ import time
 import pickle
 import ipdb
 import json
+from pandas_ml import ConfusionMatrix
 
 def check_args(args):
     
@@ -65,7 +66,8 @@ def infer_images(image_dir, model_path, output_dir,args):
     
     with open(args.haralick_params,'r') as fb:
         h_lick_p=json.load(fb)
-    
+        #Initialising final_conf_mat as none value
+    final_conf_mat=None
     model = load(model_path)
     per_img_f1_score=[]
     for idx,file in enumerate(filelist):
@@ -75,7 +77,14 @@ def infer_images(image_dir, model_path, output_dir,args):
         print ('[INFO] Processing images:',f_b_name)
         #If file name already exists pass and process forward. 
         predictions,labls=gen_predictions(file,h_lick_p,args,model)
-
+        #Confusion matrix generation
+        tmp_conf_mat=gen_conf_mat(labls,predictions)
+        
+        if final_conf_mat is None:
+            final_conf_mat=tmp_conf_mat
+        else:    
+            final_conf_mat=final_conf_mat+tmp_conf_mat
+        
         #f1 score performance metrics 
         tmp_dict.update(calc_f1_scr(labls,predictions))
         per_img_f1_score.append(tmp_dict)
@@ -86,6 +95,19 @@ def infer_images(image_dir, model_path, output_dir,args):
             timestr = time.strftime("%Y%m%d-%H%M%S")
             with open(os.path.join(output_dir,'f1score_per_cls'+timestr+'.pickle'),'wb') as fb:
                 pickle.dump(per_img_f1_score,fb)
+                
+def gen_conf_mat(y_pred,y_true):
+    """Generate confusion matrix with the appropriate naming conventions"""
+    
+    inv_label_dict={0:'background',63:'liver',126:'l_kidney',189:'r_kidney',252:'spleen'}
+    #Rename columne for analysis
+    tmp_conf_mat=ConfusionMatrix(y_true,y_pred)
+    tmp_conf_mat=tmp_conf_mat.to_dataframe()
+    filt_df_dict={k:v for k,v in inv_label_dict.items() if k in tmp_conf_mat.columns.tolist()}
+    tmp_conf_mat.rename(columns=filt_df_dict,axis=0,inplace=True)
+    tmp_conf_mat.rename(columns=filt_df_dict,axis=1,inplace=True)
+    
+    return tmp_conf_mat
 
 def calc_f1_scr(labls,predictions,
                  label_dict={'background':0,'liver':63,'l_kidney':126,'r_kidney':189,'spleen':252}):
