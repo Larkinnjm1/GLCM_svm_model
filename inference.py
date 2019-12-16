@@ -16,6 +16,7 @@ import pickle
 import ipdb
 import json
 from pandas_ml import ConfusionMatrix
+from gen_visualisations import gen_img_visual
 
 def check_args(args):
     
@@ -88,6 +89,8 @@ def infer_images(image_dir, model_path, output_dir,args):
         #f1 score performance metrics 
         tmp_dict.update(calc_f1_scr(labls,predictions))
         per_img_f1_score.append(tmp_dict)
+        #
+        
         #ipdb.set_trace()
         #record intermittent results for analysis to ensure per class information is not lost. 
         if idx%100==0:
@@ -136,7 +139,7 @@ def gen_predictions(file,h_lick_p,args,model):
     
     f_b_name=os.path.basename(file)
     dst_f_path=os.path.join(output_dir,'mask_pred_'+f_b_name)
-    
+    dst_f_path_bin=os.path.join(output_dir,'mask_pred_binarized_'+f_b_name)
     #Get image and file
     tmp_img,tmp_labl=get_mask_n_img_f(file)
     #If file is present for prediction just read in and return else generate
@@ -159,6 +162,8 @@ def gen_predictions(file,h_lick_p,args,model):
         predictions=compute_prediction(features, model)
         
         write_img_to_file(predictions,tmp_img,dst_f_path)
+        #Writing binary logit to file for analysis. 
+        gen_img_visual(tmp_img,predictions,tmp_labl,dst_f_path_bin)
         
         return predictions.flatten(),labls
 
