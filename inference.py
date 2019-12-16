@@ -9,6 +9,7 @@ from train import create_features,min_max_scaling
 from joblib import load
 import pathlib
 from sklearn.preprocessing import MinMaxScaler
+import pandas as pd
 from sklearn.metrics import f1_score,precision_recall_fscore_support
 import imageio
 import time
@@ -93,11 +94,12 @@ def infer_images(image_dir, model_path, output_dir,args):
         
         #ipdb.set_trace()
         #record intermittent results for analysis to ensure per class information is not lost. 
-        if idx%100==0:
-            
-            timestr = time.strftime("%Y%m%d-%H%M%S")
-            with open(os.path.join(output_dir,'f1score_per_cls'+timestr+'.pickle'),'wb') as fb:
-                pickle.dump(per_img_f1_score,fb)
+        
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    tmp_df=pd.DataFrame(per_img_f1_score)
+    tmp_df.to_excel(os.path.join(output_dir,'glcm_svm_f1score_per_cls_'+timestr+'.xlsx'))
+    final_conf_mat.to_excel(os.path.join(output_dir,'glcm_svm_confusion_matrix_'+timestr+'.xlsx'))
+
                 
 def gen_conf_mat(y_pred,y_true):
     """Generate confusion matrix with the appropriate naming conventions"""
