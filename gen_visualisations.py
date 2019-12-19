@@ -6,7 +6,7 @@ Created on Sun Dec 15 23:47:37 2019
 """
 import matplotlib.pyplot as plt
 import numpy as np
-
+import ipdb
 def gen_img_visual(tmp_img,pred,mask,output_path):
     
     cls_dict = {'background':0,'liver':63,'r_kidney':126,'l_kidney':189,'spleen':252}
@@ -15,10 +15,12 @@ def gen_img_visual(tmp_img,pred,mask,output_path):
     
     mask_logit_idx_slc_unet={'background':(4,4),'l_kidney':(0,0),'r_kidney':(2,2),
                              'liver':(1,1),'spleen':(3,3)}
-    
-    gt_mask=gen_binary_mask(mask,class_values)
-    pr_mask=gen_binary_mask(pred,class_values)
-    
+    try:
+
+        gt_mask=gen_binary_mask(mask,class_values)
+        pr_mask=gen_binary_mask(pred,class_values)
+    except:
+        ipdb.set_trace()
     #Generate visualisation on per slice basis
     visualize(output_path,
         image=tmp_img,

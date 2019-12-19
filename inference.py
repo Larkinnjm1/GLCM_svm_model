@@ -18,6 +18,18 @@ import ipdb
 import json
 from pandas_ml import ConfusionMatrix
 from gen_visualisations import gen_img_visual
+from PIL import Image
+import collections
+
+def resize_img_PIL(img:np.ndarray,shp_sp=(256,256)):
+    
+    if img.shape!=shp_sp:
+        PIL_img=Image.fromarray(img)
+        np_img_reshp=np.array(PIL_img.resize(shp_sp))
+        
+        return np_img_reshp
+    else:
+        return img
 
 def check_args(args):
     
@@ -84,12 +96,15 @@ def infer_images(image_dir, model_path, output_dir,args):
         
         if final_conf_mat is None:
             final_conf_mat=tmp_conf_mat
-        else:    
-            final_conf_mat=final_conf_mat+tmp_conf_mat
-        
+        else:
+            tmp_conf_mat_add=final_conf_mat.copy()
+            final_conf_mat=final_conf_mat.add(tmp_conf_mat)
+            final_conf_mat[final_conf_mat.isnull()]=tmp_conf_mat
         #f1 score performance metrics 
         tmp_dict.update(calc_f1_scr(labls,predictions))
-        per_img_f1_score.append(tmp_dict)
+        trl_dict=flatten_dict(tmp_dict)
+        #ipdb.set_trace()
+        per_img_f1_score.append(trl_dict)
         #
         
         #ipdb.set_trace()
@@ -97,20 +112,31 @@ def infer_images(image_dir, model_path, output_dir,args):
         
     timestr = time.strftime("%Y%m%d-%H%M%S")
     tmp_df=pd.DataFrame(per_img_f1_score)
+    
+    
     tmp_df.to_excel(os.path.join(output_dir,'glcm_svm_f1score_per_cls_'+timestr+'.xlsx'))
     final_conf_mat.to_excel(os.path.join(output_dir,'glcm_svm_confusion_matrix_'+timestr+'.xlsx'))
 
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
                 
 def gen_conf_mat(y_pred,y_true):
     """Generate confusion matrix with the appropriate naming conventions"""
-    
+    #ipdb.set_trace() 
     inv_label_dict={0:'background',63:'liver',126:'l_kidney',189:'r_kidney',252:'spleen'}
     #Rename columne for analysis
     tmp_conf_mat=ConfusionMatrix(y_true,y_pred)
     tmp_conf_mat=tmp_conf_mat.to_dataframe()
     filt_df_dict={k:v for k,v in inv_label_dict.items() if k in tmp_conf_mat.columns.tolist()}
-    tmp_conf_mat.rename(columns=filt_df_dict,axis=0,inplace=True)
-    tmp_conf_mat.rename(columns=filt_df_dict,axis=1,inplace=True)
+    tmp_conf_mat.rename(filt_df_dict,axis=0,inplace=True)
+    tmp_conf_mat.rename(filt_df_dict,axis=1,inplace=True)
     
     return tmp_conf_mat
 
@@ -126,11 +152,13 @@ def calc_f1_scr(labls,predictions,
     #Getting nan values if colour is not present i mask
     per_cls_f1_scr_dict={k:(x if x in labls_present else 'NaN') for k,x in label_dict.items()}
     #returning final values if x is present 
-    per_cls_f1_scr_dict={k:(x if x=='NaN' else {'prec':prec[i],
+    per_cls_f1_scr_dict={k:({'prec':'NaN',
+                             'recall':'NaN',
+                             'f1score':'NaN',
+                             'support ':'NaN'} if x=='NaN' else {'prec':prec[i],
                                                 'recall':recall[i],
                                                 'f1score':f1[i],
-                                                'support ':sprt[i]}) for i,(k,x) in enumerate(per_cls_f1_scr_dict.items())}
-    
+                                                'support ':sprt[i]}) for i,(k,x) in enumerate(per_cls_f1_scr_dict.items())}    
     non_wght_dict_avrg={'non_weighted_average':f1_score(labls,predictions,average='macro')}
     
     per_cls_f1_scr_dict.update(non_wght_dict_avrg)
@@ -144,9 +172,10 @@ def gen_predictions(file,h_lick_p,args,model):
     dst_f_path_bin=os.path.join(output_dir,'mask_pred_binarized_'+f_b_name)
     #Get image and file
     tmp_img,tmp_labl=get_mask_n_img_f(file)
+    
     #If file is present for prediction just read in and return else generate
     #texture features and image from scratch where required
-    if os.path.isfile(dst_f_path):
+    if os.path.isfile(dst_f_path+'_not_a_file_result'):
         
         return imageio.imread(dst_f_path).flatten(),tmp_labl.flatten()
         
@@ -162,10 +191,10 @@ def gen_predictions(file,h_lick_p,args,model):
         features,_=min_max_scaling(features)
         
         predictions=compute_prediction(features, model)
-        
+        #ipdb.set_trace()   
         write_img_to_file(predictions,tmp_img,dst_f_path)
         #Writing binary logit to file for analysis. 
-        gen_img_visual(tmp_img,predictions,tmp_labl,dst_f_path_bin)
+        gen_img_visual(tmp_img,predictions.reshape((256,256)),tmp_labl,dst_f_path_bin)
         
         return predictions.flatten(),labls
 
@@ -179,6 +208,9 @@ def get_mask_n_img_f(file):
    tmp_img=imageio.imread(file)
             #replace from left to right path to masks. for opening up labels image.  
    tmp_labl=imageio.imread('masks'.join(str(file).rsplit('images',1)))                
+  
+   tmp_img=resize_img_PIL(tmp_img)
+   tmp_labl=resize_img_PIL(tmp_labl)  
    
    return tmp_img,tmp_labl
    
