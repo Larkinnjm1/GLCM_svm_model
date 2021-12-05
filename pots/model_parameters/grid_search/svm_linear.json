@@ -1,0 +1,2 @@
+{"ovr__base_estimator__C": [10, 100, 1000],
+  "ovr__base_estimator__kernel": ["linear"]}

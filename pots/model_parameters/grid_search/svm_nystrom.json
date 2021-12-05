@@ -1,0 +1,10 @@
+[{"nystreum__gamma":[100,10,1,0.1],
+  "nystreum__n_components":[300,60,11],
+  "nystreum__kernel":["rbf"],
+  "ovr__penalty":["l1", "l2"],
+  "ovr__loss":["hinge", "modified_huber", "perceptron"]},
+  {"nystreum__gamma":[100,10,1,0.1],
+  "nystreum__n_components":[300,60,11],
+    "nystreum__kernel":["sigmoid","polynomial"],
+  "ovr__penalty":["l2"],
+    "ovr__loss":["hinge", "modified_huber", "perceptron"]}]

@@ -21,13 +21,13 @@ from scipy import stats
 import imageio
 from haralick_feat_gen import haralick_features
 from grey_scale_bkgrnd_foregrnd_seg import img_grey_scale_preprocess
-#from imblearn.combine import SMOTETomek
+from imblearn.combine import SMOTETomek
 from sklearn.svm import LinearSVC, SVC
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 #from pipelinehelper import PipelineHelper
-from sklearn.externals import joblib
+import joblib
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.linear_model import LogisticRegression,SGDClassifier
 from sklearn.kernel_approximation import Nystroem,AdditiveChi2Sampler
@@ -265,11 +265,6 @@ def sub_sample_wrapper(features_smt,label_smt,num_examples_perc):
     ss_idx = subsample_idx(0, features_smt.shape[0],num_examples)
     features_ss = features_smt[ss_idx]
     labels_ss = label_smt[ss_idx]
-    #except UnboundLocalError as e:
-     #   print('Error during sub sampling:',e)
-      #  ss_idx = subsample_idx(0, features.shape[0], num_examples)
-       # features_ss = features[ss_idx]
-        #labels_ss = label_flat[ss_idx]
     
     return features_ss,labels_ss
 
@@ -335,6 +330,8 @@ def train_model(X:np.ndarray, y:np.ndarray, classifier:str):
         from sklearn.ensemble import GradientBoostingClassifier
         model = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0)
         model.fit(X, y)
+    else:
+        raise NotImplementedError(f"Classifier {classifier} not implemented at this time")
 
     print ('[INFO] Model training complete.')
     print ('[INFO] Training Accuracy: %.2f' %OVR_pipe.score(X, y))

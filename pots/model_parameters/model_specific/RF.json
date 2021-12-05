@@ -1,0 +1,3 @@
+{"n_estimators":250,
+"max_depth": 12,
+"random_state": 42}

@@ -1,0 +1,4 @@
+[{"chi_sqr__sample_steps":[1,2,3],
+  "ovr__penalty":["l1", "l2"],
+  "ovr__loss":["hinge", "modified_huber", "perceptron"]}]
+

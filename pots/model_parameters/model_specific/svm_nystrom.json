@@ -1,0 +1,2 @@
+{"nystreum": {"gamma": 10,"n_components":300,"kernel":"rbf"},
+"ovr":{"max_iter":5000,"tol":0.001,"penalty":"l1","loss":"modified_huber","class_weight":"balanced"}}

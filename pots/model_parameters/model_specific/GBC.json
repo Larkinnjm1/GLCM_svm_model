@@ -1,0 +1,5 @@
+{"n_estimators":100,
+"max_depth": 1,
+"random_state": 0,
+  "learning_rate": 1.0
+}
