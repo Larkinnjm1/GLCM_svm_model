@@ -19,21 +19,21 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
 ### Feature channels:
 1. Spectral:
 
-* Grey level features. 
+** Grey level features. 
 
 2. Texture Haralick features:
 
-GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the "h_lick_p" flag when training a new model with the 'train.py' script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to 'glcm_feature_params.json' for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
+> > GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the "h_lick_p" flag when training a new model with the 'train.py' script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to 'glcm_feature_params.json' for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
 
-- Contrast
-- Dissimilarity
-- Homogeneity
-- Angular Second Moment
-- (ASM)
-- Energy
-- Correlation
+** Contrast
+** Dissimilarity
+** Homogeneity
+** Angular Second Moment
+** (ASM)
+** Energy
+** Correlation
 
-Note that if haralick features have already been created for a given image set and are present in the "--text_dir" flag defined by the user these texture files will not be created again to ensure efficient texture file generation is performed. 
+>> Note that if haralick features have already been created for a given image set and are present in the "--text_dir" flag defined by the user these texture files will not be created again to ensure efficient texture file generation is performed. 
 
 
 ### Supported Learners
