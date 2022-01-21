@@ -5,7 +5,7 @@ enum34==1.1.10
 imageio==2.13.1
 imbalanced-learn==0.8.1
 imblearn==0.0
-ipython==7.30.1
+ipython==7.31.1
 jedi==0.18.1
 joblib==1.1.0
 mahotas==1.4.12
