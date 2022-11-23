@@ -45,7 +45,9 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
 #### Training
 Training each model in either a grid search pattern or with sepcified parameters given by the user can be performed with the following command:
 
-'''python train.py -i <path_to_image_folder> -l <path/to/label/folder> -c <SVM, RF, GBC> -o <path/to/model.p>''' 
+```python 
+train.py -i <path_to_image_folder> -l <path/to/label/folder> -c <SVM, RF, GBC> -o <path/to/model.p>
+``` 
 
 For further details on arguments please refer to the arg parse method "parse_args" present within the script. 
 
