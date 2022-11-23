@@ -5,7 +5,7 @@ Per pixel image segmentation using machine learning algorithms. Please refer to 
 # Image pre processing
 Note there is an image processing script 'course_seg_resize_imgs_only.py' which can be used with MRI and CT scan images that performs the following functions:
 
-* Basic otsu thresholding for bounding box segementation around the primary blob of interest in the foreground of the scan(e.g. the body in question). The utility of pre processing the images like this prior to training is that it reduces the class imbalance issue of 0 value background pixels when training the SVM and ensures the texture rasters are focused on the primary foreground image of interest. 
+* Basic otsu thresholding for bounding box segmentation around the primary blob of interest in the foreground of the scan(e.g. the ROI in question). The utility of pre processing the images like this prior to training is that it reduces the class imbalance issue of 0 value background pixels when training the SVM and ensures the texture rasters are focused on the primary foreground image of interest. 
 * Resizes all images to the most common image WxH dimensions within the patient population being evaluated. 
 
 Note that the output of these pre processed images will need to be visually inspected by the user manually to confirm it is working correctly.   
