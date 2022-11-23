@@ -21,7 +21,7 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
     * Grey level features. 
 
 2. Texture Haralick features:
-    * GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the "h_lick_p" flag when training a new model with the 'train.py' script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to 'glcm_feature_params.json' for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
+    * GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the ```python -h_lick_p" ``` flag when training a new model with the ```python train.py``` script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to ```python glcm_feature_params.json``` for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
      * Contrast
      * Dissimilarity
      * Homogeneity
