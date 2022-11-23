@@ -22,21 +22,19 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
 
 2. Texture Haralick features:
     * GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the "h_lick_p" flag when training a new model with the 'train.py' script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to 'glcm_feature_params.json' for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
-        * Contrast
-     *Contrast
-* * Dissimilarity
-* * Homogeneity
-* * Angular Second Moment
-* * (ASM)
-* * Energy
-* * Correlation
+     * Contrast
+     * Dissimilarity
+     * Homogeneity
+     * Angular Second Moment (ASM)
+     * Energy
+     * Correlation
 
 > > Note that if haralick features have already been created for a given image set and are present in the "--text_dir" flag defined by the user these texture files will not be created again to ensure efficient texture file generation is performed. 
 
 
 ### Supported Learners
 
-* Support Vector Machine using either a chi squared, nystrom non linear approximations or a linear kernel
+* Support Vector Machine using either a Chi squared, Nystrom non-linear approximations or a linear kernel
 
 
 ### Example Usage
