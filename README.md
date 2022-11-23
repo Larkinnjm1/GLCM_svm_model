@@ -46,7 +46,7 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
 Training each model in either a grid search pattern or with sepcified parameters given by the user can be performed with the following command:
 
 ```python 
-train.py -i <path_to_image_folder> -l <path/to/label/folder> -c <SVM, RF, GBC> -o <path/to/model.p>
+python train.py -i <path_to_image_folder> -l <path/to/label/folder> -c <SVM, RF, GBC> -o <path/to/model.p>
 ``` 
 
 For further details on arguments please refer to the arg parse method "parse_args" present within the script. 
@@ -54,10 +54,14 @@ For further details on arguments please refer to the arg parse method "parse_arg
 #### Inference
 To leverage an existing model to generate prediction images for each image both in terms of binary prediction images and general analysis use the followig command:
 
+```python 
 python inference.py  -i <path_to_image_folder> -m <path/to/model.p> -o <path/to/output/folder> -txt <path/to/texture images (numpy format)> -h_lick_p <path/to/json file denoting haralick parameters> -p <path/to/patient substring file used to filter patient specific files for edge case analysis>
+```
 
 #### Visualisations: 
+``` python
 gen_analy_report_train_test_curves.py
+```
 Script used to generate training curves plots wrt to training set size and number of training iterations. 
   '-rw_r_dir':'source results directory where raw results are read in for analysis',
                         required=True)
@@ -69,4 +73,6 @@ Script used to generate training curves plots wrt to training set size and numbe
 
 ### Requirements
 train.py-imblearn API
-inference.py:pandas_ml API  please note that if inference.py is being used imblearn needs to be hashed out of train.py due to the fact that there is requirements bug present between pandas-ml library and imblearn sklearn version requirements. Hence if either of these scripts are to be used an scikit-learn version <0.20. has to be used for pandas_ml in inference and >0.210 for imblearn for train.py prior to running either script.  
+inference.py:pandas_ml API  
+
+Please note that if ```python inference.py``` is being used ```python imblearn``` needs to be hashed out of ```train.py``` due to the fact that there is requirements bug present between ```python  pandas-ml``` library and imblearn sklearn version requirements. Hence if either of these scripts are to be used an ``` python scikit-learn``` version <0.20. has to be used for ```python pandas_ml``` in inference and >0.210 for imblearn for train.py prior to running either script.  
