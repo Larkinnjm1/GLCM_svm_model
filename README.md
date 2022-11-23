@@ -1,9 +1,9 @@
 # Machine Learning - Image Segmentation
 
-Per pixel image segmentation using machine learning algorithms. Please refer to the requirements.txt file for environment requirements. Compatible with Python 3.6.
+Per pixel image segmentation using machine learning algorithms. Please refer to the ```requirements.txt``` file for environment requirements. Compatible with Python 3.6.
 
 # Image pre processing
-Note there is an image processing script 'course_seg_resize_imgs_only.py' which can be used with MRI and CT scan images that performs the following functions:
+Note there is an image processing script ```course_seg_resize_imgs_only.py``` which can be used with MRI and CT scan images that performs the following functions:
 
 * Basic otsu thresholding for bounding box segmentation around the primary blob of interest in the foreground of the scan(e.g. the ROI in question). The utility of pre processing the images like this prior to training is that it reduces the class imbalance issue of 0 value background pixels when training the SVM and ensures the texture rasters are focused on the primary foreground image of interest. 
 * Resizes all images to the most common image WxH dimensions within the patient population being evaluated. 
@@ -21,7 +21,7 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
     * Grey level features. 
 
 2. Texture Haralick features:
-    * GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the ```python -h_lick_p" ``` flag when training a new model with the ```python train.py``` script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to ```python glcm_feature_params.json``` for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
+    * GLCM(Grey Level Co-occurence Matrices) are generated per the parameters defined in the json file provided by the user against the ```-h_lick_p" ``` flag when training a new model with the ```train.py``` script. Haralick parameters are then calculated from these GLCM's with the parameters for this again being defined in the same json file provided by the user. Refer to ```glcm_feature_params.json``` for a template of how this can be generated. The specific haralick feature types that can be calculated from these GLCM's are:
      * Contrast
      * Dissimilarity
      * Homogeneity
@@ -29,7 +29,7 @@ The final feature vector generated for training is 2-D matrix, RxC where R is th
      * Energy
      * Correlation
 
-> > Note that if haralick features have already been created for a given image set and are present in the "--text_dir" flag defined by the user these texture files will not be created again to ensure efficient texture file generation is performed. 
+> > Note that if haralick features have already been created for a given image set and are present in the ```--text_dir``` flag defined by the user these texture files will not be created again to ensure efficient texture file generation is performed. 
 
 
 ### Supported Learners
@@ -71,4 +71,4 @@ Script used to generate training curves plots wrt to training set size and numbe
 train.py-imblearn API
 inference.py:pandas_ml API  
 
-Please note that if ```python inference.py``` is being used ```python imblearn``` needs to be hashed out of ```train.py``` due to the fact that there is requirements bug present between ```python  pandas-ml``` library and imblearn sklearn version requirements. Hence if either of these scripts are to be used an ``` python scikit-learn``` version <0.20. has to be used for ```python pandas_ml``` in inference and >0.210 for imblearn for train.py prior to running either script.  
+Please note that if ```inference.py``` is being used ```imblearn``` needs to be hashed out of ```train.py``` due to the fact that there is requirements bug present between ```pandas-ml``` library and imblearn sklearn version requirements. Hence if either of these scripts are to be used an ``` scikit-learn``` version <0.20. has to be used for ```pandas_ml``` in inference and >0.210 for imblearn for train.py prior to running either script.  
