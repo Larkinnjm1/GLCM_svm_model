@@ -68,7 +68,7 @@ Script used to generate training curves plots wrt to training set size and numbe
   '-t':'Destination path to texture feature files created during analysis'
 
 ### Requirements
-train.py-imblearn API
-inference.py:pandas_ml API  
+* train.py: imblearn package
+* inference.py: pandas_ml package  
 
 Please note that if ```inference.py``` is being used ```imblearn``` needs to be hashed out of ```train.py``` due to the fact that there is requirements bug present between ```pandas-ml``` library and imblearn sklearn version requirements. Hence if either of these scripts are to be used an ``` scikit-learn``` version <0.20. has to be used for ```pandas_ml``` in inference and >0.210 for imblearn for train.py prior to running either script.  
